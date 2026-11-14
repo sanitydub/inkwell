@@ -22,7 +22,7 @@ export function normalizeTag(raw: string): string | null {
 }
 
 /** Markdown with fenced code blocks and inline code blanked out, so tags inside code are ignored. */
-function withoutCode(markdown: string): string {
+export function withoutCode(markdown: string): string {
 	let fence: string | null = null;
 	return markdown
 		.split('\n')

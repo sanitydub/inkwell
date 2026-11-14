@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DATA_DIR } from '$app/env/private';
 import { extractTags } from '#lib/tags.ts';
+import { extractLinks } from '#lib/links.ts';
 
 // Each entry runs once, in order. Never edit a shipped migration; append a new one.
 // An entry is SQL, or a function for changes that need code (like backfilling data).
@@ -81,6 +82,22 @@ const migrations: (string | ((db: DatabaseSync) => void))[] = [
 		const insert = db.prepare('INSERT INTO note_tags (note_id, tag) VALUES (?, ?)');
 		for (const row of db.prepare('SELECT id, content FROM notes').all() as { id: string; content: string }[]) {
 			for (const tag of extractTags(row.content)) insert.run(row.id, tag);
+		}
+	},
+
+	// 3: [[wiki-links]], indexed by normalized target title for backlinks.
+	(db) => {
+		db.exec(`
+			CREATE TABLE note_links (
+				note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+				target  TEXT NOT NULL,
+				PRIMARY KEY (note_id, target)
+			) WITHOUT ROWID;
+			CREATE INDEX note_links_target ON note_links(target);
+		`);
+		const insert = db.prepare('INSERT INTO note_links (note_id, target) VALUES (?, ?)');
+		for (const row of db.prepare('SELECT id, content FROM notes').all() as { id: string; content: string }[]) {
+			for (const target of extractLinks(row.content)) insert.run(row.id, target);
 		}
 	}
 ];

@@ -52,3 +52,15 @@ export interface TagCount {
 	/** Notes with this exact tag, not counting the trash. */
 	noteCount: number;
 }
+
+export interface NoteTitle {
+	id: string;
+	title: string;
+}
+
+/** A note that links to another, with the line that holds the link. */
+export interface Backlink {
+	id: string;
+	title: string;
+	context: string;
+}

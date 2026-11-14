@@ -1,6 +1,7 @@
 import { api, ApiError } from './api';
 import { snippetFrom } from './snippet';
-import type { Note, Notebook, NotePatch, NoteSummary, TagCount, View } from './types';
+import { normalizeTitle } from './links';
+import type { Backlink, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, View } from './types';
 
 export type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -23,7 +24,21 @@ export class Workspace {
 	notebooks = $state<Notebook[]>([]);
 	tags = $state<TagCount[]>([]);
 
+	/** Every note title outside the trash, newest first: used to resolve and suggest [[links]]. */
+	titles = $state<NoteTitle[]>([]);
+	/** Normalized title → note id; the most recently edited note wins when titles repeat. */
+	titleIndex = $derived.by(() => {
+		const index = new Map<string, string>();
+		for (const t of this.titles) {
+			const key = normalizeTitle(t.title);
+			if (key && !index.has(key)) index.set(key, t.id);
+		}
+		return index;
+	});
+
 	current = $state<Note | null>(null);
+	/** Notes that link to the open note. */
+	backlinks = $state<Backlink[]>([]);
 	saveState = $state<SaveState>('idle');
 	message = $state<string | null>(null);
 	/** Set when a note was just created, so the editor can put the cursor in its title. */
@@ -34,6 +49,8 @@ export class Workspace {
 	#searchTimer: ReturnType<typeof setTimeout> | undefined;
 	#saveQueue: Promise<void> = Promise.resolve();
 	#listSeq = 0;
+	/** The open note's title as last saved, to notice renames (which change titles and backlinks). */
+	#savedTitle = '';
 
 	get hasUnsavedChanges() {
 		return this.#dirty;
@@ -80,6 +97,33 @@ export class Workspace {
 		}
 	}
 
+	async refreshTitles() {
+		try {
+			this.titles = (await api.listTitles()).notes;
+		} catch (err) {
+			this.#fail(err);
+		}
+	}
+
+	async #loadBacklinks() {
+		const id = this.current?.id;
+		if (!id) return;
+		try {
+			const { backlinks } = await api.listBacklinks(id);
+			if (this.current?.id === id) this.backlinks = backlinks;
+		} catch {
+			// Not worth interrupting anyone over; the list just stays as it was.
+		}
+	}
+
+	#opened(note: Note) {
+		this.current = note;
+		this.saveState = 'idle';
+		this.backlinks = [];
+		this.#savedTitle = note.title;
+		this.#loadBacklinks();
+	}
+
 	async #show(view: View, notebookId: string | null, tag: string | null) {
 		if (view === this.view && notebookId === this.notebookId && tag === this.tag) return;
 		this.view = view;
@@ -114,8 +158,7 @@ export class Workspace {
 		if (this.current?.id === id) return;
 		await this.flush();
 		try {
-			this.current = await api.getNote(id);
-			this.saveState = 'idle';
+			this.#opened(await api.getNote(id));
 		} catch (err) {
 			this.#fail(err);
 		}
@@ -126,20 +169,30 @@ export class Workspace {
 		this.current = null;
 	}
 
-	/** Creates a note in whatever notebook or tag is being viewed, so it shows up in the list. */
-	async create() {
+	/** Opens the note a [[link]] points to, or creates it if no note has that title yet. */
+	async openByTitle(title: string) {
+		const id = this.titleIndex.get(normalizeTitle(title));
+		if (id) return this.open(id);
+		await this.create({ title: title.trim() });
+	}
+
+	/**
+	 * Creates a note in whatever notebook or tag is being viewed, so it shows up in the list.
+	 * With a title (from following a [[link]]), the cursor goes to the body instead of the title.
+	 */
+	async create(options: { title?: string } = {}) {
 		await this.flush();
 		this.query = '';
 		if (this.view !== 'all') this.view = 'all';
 		try {
 			const note = await api.createNote({
+				title: options.title,
 				notebookId: this.notebookId,
 				content: this.tag ? `#${this.tag} ` : ''
 			});
-			this.current = note;
-			this.saveState = 'idle';
-			this.freshNoteId = note.id;
-			await Promise.all([this.refresh(), this.refreshSidebar()]);
+			this.#opened(note);
+			if (!options.title) this.freshNoteId = note.id;
+			await Promise.all([this.refresh(), this.refreshSidebar(), this.refreshTitles()]);
 		} catch (err) {
 			this.#fail(err);
 		}
@@ -185,6 +238,11 @@ export class Workspace {
 		this.saveState = 'saving';
 		try {
 			const saved = await api.updateNote(note.id, { title: note.title, content: note.content });
+			if (saved.title !== this.#savedTitle && this.current?.id === note.id) {
+				this.#savedTitle = saved.title;
+				this.refreshTitles();
+				this.#loadBacklinks();
+			}
 			const tagsChanged = saved.tags.join('\n') !== note.tags.join('\n');
 			note.updatedAt = saved.updatedAt;
 			note.tags = saved.tags;
@@ -220,7 +278,7 @@ export class Workspace {
 					notebookId: saved.notebookId
 				});
 			}
-			await Promise.all([this.refresh(), this.refreshSidebar()]);
+			await Promise.all([this.refresh(), this.refreshSidebar(), 'trashed' in patch && this.refreshTitles()]);
 			return saved;
 		} catch (err) {
 			this.#fail(err);
@@ -250,7 +308,7 @@ export class Workspace {
 		try {
 			await api.deleteNote(note.id);
 			this.current = null;
-			await Promise.all([this.refresh(), this.refreshSidebar()]);
+			await Promise.all([this.refresh(), this.refreshSidebar(), this.refreshTitles()]);
 		} catch (err) {
 			this.#fail(err);
 		}

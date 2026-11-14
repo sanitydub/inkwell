@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronLeft, Download, Notebook as NotebookIcon, Pin, PinOff, RotateCcw, Trash2 } from '@lucide/svelte';
+	import { ChevronDown, ChevronLeft, Download, Link2, Notebook as NotebookIcon, Pin, PinOff, RotateCcw, Trash2 } from '@lucide/svelte';
 	import Editor from './Editor.svelte';
 	import Preview from './Preview.svelte';
 	import { longDate } from '#lib/format.ts';
@@ -30,6 +30,20 @@
 	const note = $derived(ws.current);
 	// Worked out locally so chips update as you type; the server indexes the same thing on save.
 	const tags = $derived(note ? extractTags(note.content) : []);
+	const knownTitles = $derived(new Set(ws.titleIndex.keys()));
+	const linkTitles = () => ws.titles.map((t) => t.title);
+
+	// "Linked from" list: closes on outside click, Escape, or opening another note.
+	let showBacklinks = $state(false);
+	let backlinksBox = $state<HTMLElement>();
+	$effect(() => {
+		note?.id;
+		showBacklinks = false;
+	});
+
+	function closeBacklinksOnOutsideClick(e: MouseEvent) {
+		if (showBacklinks && backlinksBox && !backlinksBox.contains(e.target as Node)) showBacklinks = false;
+	}
 	// Notes in the trash are read-only, so show them rendered.
 	const shown = $derived<Mode>(note?.trashed ? 'read' : mode);
 
@@ -98,6 +112,11 @@
 		if (confirm(`Delete “${title}” forever? This can’t be undone.`)) ws.deleteForever();
 	}
 </script>
+
+<svelte:window
+	onclick={closeBacklinksOnOutsideClick}
+	onkeydown={(e) => e.key === 'Escape' && (showBacklinks = false)}
+/>
 
 <section class="note-pane mode-{shown}" aria-label="Note">
 	{#if note}
@@ -175,6 +194,31 @@
 				<span aria-hidden="true">{ws.notebookName(note.notebookId) ?? 'No notebook'}</span>
 				<ChevronDown size={13} />
 			</label>
+			{#if ws.backlinks.length}
+				<div class="backlinks" bind:this={backlinksBox}>
+					<button
+						class="pill"
+						aria-expanded={showBacklinks}
+						aria-controls="backlinks-list"
+						onclick={() => (showBacklinks = !showBacklinks)}
+					>
+						<Link2 size={14} strokeWidth={1.75} />
+						Linked from {ws.backlinks.length}
+					</button>
+					{#if showBacklinks}
+						<ul id="backlinks-list" class="popover">
+							{#each ws.backlinks as link (link.id)}
+								<li>
+									<button onclick={() => ws.open(link.id)}>
+										<span class="link-title" class:untitled={!link.title.trim()}>{link.title.trim() || 'Untitled'}</span>
+										{#if link.context}<span class="link-context">{link.context}</span>{/if}
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{/if}
 			{#each tags as tag (tag)}
 				<button class="tag" onclick={() => ws.showTag(tag)} title="Show notes tagged #{tag}">#{tag}</button>
 			{/each}
@@ -185,13 +229,24 @@
 				<!-- Kept mounted while reading so undo history survives switching layouts. -->
 				<div class="write" hidden={shown === 'read'}>
 					{#key note.id}
-						<Editor bind:this={editor} value={note.content} onchange={(content) => ws.edit({ content })} />
+						<Editor
+							bind:this={editor}
+							value={note.content}
+							titles={linkTitles}
+							onchange={(content) => ws.edit({ content })}
+							onopenlink={(title) => ws.openByTitle(title)}
+						/>
 					{/key}
 				</div>
 			{/if}
 			{#if shown !== 'write'}
 				<div class="read">
-					<Preview source={note.content} ontag={(tag) => ws.showTag(tag)} />
+					<Preview
+						source={note.content}
+						{knownTitles}
+						ontag={(tag) => ws.showTag(tag)}
+						onlink={(title) => ws.openByTitle(title)}
+					/>
 				</div>
 			{/if}
 		</div>
@@ -349,6 +404,70 @@
 	}
 	.notebook select:disabled {
 		cursor: default;
+	}
+	.backlinks {
+		position: relative;
+	}
+	.pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		height: 1.6rem;
+		padding: 0 0.55rem;
+		border: 0;
+		border-radius: 999px;
+		background: var(--panel);
+		color: var(--ink);
+		font-size: 0.8rem;
+		font-weight: 500;
+	}
+	.pill:hover,
+	.pill[aria-expanded='true'] {
+		background: var(--panel-strong);
+	}
+	.popover {
+		position: absolute;
+		top: calc(100% + 0.35rem);
+		left: 0;
+		z-index: 15;
+		width: min(22rem, 80vw);
+		max-height: 18rem;
+		overflow-y: auto;
+		margin: 0;
+		padding: 0.3rem;
+		list-style: none;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--paper);
+		box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+	}
+	.popover button {
+		display: block;
+		width: 100%;
+		padding: 0.5rem 0.6rem;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		text-align: left;
+	}
+	.popover button:hover {
+		background: var(--panel);
+	}
+	.link-title {
+		display: block;
+		font-size: 0.875rem;
+		font-weight: 600;
+	}
+	.link-title.untitled {
+		color: var(--faint);
+		font-style: italic;
+	}
+	.link-context {
+		display: block;
+		margin-top: 0.1rem;
+		color: var(--muted);
+		font-size: 0.8rem;
+		line-height: 1.4;
 	}
 	.tag {
 		height: 1.6rem;

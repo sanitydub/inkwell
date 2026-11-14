@@ -17,17 +17,29 @@
 	import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 	import { languages } from '@codemirror/language-data';
 	import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-	import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+	import {
+		autocompletion,
+		closeBrackets,
+		closeBracketsKeymap,
+		type Completion,
+		type CompletionContext,
+		type CompletionResult
+	} from '@codemirror/autocomplete';
 	import { tags as t } from '@lezer/highlight';
 	import { tagRegExp } from '#lib/tags.ts';
+	import { linkRegExp, linkTarget } from '#lib/links.ts';
 
 	interface Props {
 		value: string;
 		readonly?: boolean;
 		onchange?: (value: string) => void;
+		/** Note titles to suggest after typing "[[". A function so the list stays current. */
+		titles?: () => string[];
+		/** Called with a link's target title on Ctrl/⌘+click. */
+		onopenlink?: (title: string) => void;
 	}
 
-	let { value, readonly = false, onchange }: Props = $props();
+	let { value, readonly = false, onchange, titles, onopenlink }: Props = $props();
 
 	let host: HTMLDivElement;
 	let view: EditorView | undefined;
@@ -61,10 +73,7 @@
 	const tagMatcher = new MatchDecorator({
 		regexp: tagRegExp(),
 		decorate: (add, from, to, _match, view) => {
-			for (let node: { name: string; parent: unknown } | null = syntaxTree(view.state).resolveInner(from, 1); node; node = node.parent as typeof node) {
-				if (/Code|URL|Link|HTML/.test(node.name)) return;
-			}
-			add(from, to, tagMark);
+			if (!inCodeOrLink(view, from)) add(from, to, tagMark);
 		}
 	});
 	const tagHighlighter = ViewPlugin.fromClass(
@@ -80,7 +89,104 @@
 		{ decorations: (plugin) => plugin.decorations }
 	);
 
+	// True if the syntax tree says `pos` is inside code, a URL or HTML (and, optionally, a Markdown link).
+	// The Markdown parser reads [[Note]] as a link, so wiki-links pass includeLinks = false.
+	function inCodeOrLink(view: EditorView, pos: number, includeLinks = true) {
+		const pattern = includeLinks ? /Code|URL|Link|HTML/ : /Code|URL|HTML/;
+		for (let node: { name: string; parent: unknown } | null = syntaxTree(view.state).resolveInner(pos, 1); node; node = node.parent as typeof node) {
+			if (pattern.test(node.name)) return true;
+		}
+		return false;
+	}
+
+	// [[Wiki-links]]: highlighted, and Ctrl/⌘+click follows them.
+	const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+	const wikiLinkMark = Decoration.mark({
+		class: 'cm-wikilink',
+		attributes: { title: `${isMac ? '⌘' : 'Ctrl'}+click to open` }
+	});
+	const wikiLinkMatcher = new MatchDecorator({
+		regexp: linkRegExp(),
+		decorate: (add, from, to, _match, view) => {
+			if (!inCodeOrLink(view, from, false)) add(from, to, wikiLinkMark);
+		}
+	});
+	const wikiLinkHighlighter = ViewPlugin.fromClass(
+		class {
+			decorations: DecorationSet;
+			constructor(view: EditorView) {
+				this.decorations = wikiLinkMatcher.createDeco(view);
+			}
+			update(update: ViewUpdate) {
+				this.decorations = wikiLinkMatcher.updateDeco(update, this.decorations);
+			}
+		},
+		{ decorations: (plugin) => plugin.decorations }
+	);
+
+	const followLinkOnModClick = EditorView.domEventHandlers({
+		mousedown(event, view) {
+			if (!(event.metaKey || event.ctrlKey) || !onopenlink) return false;
+			const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+			if (pos == null) return false;
+			const line = view.state.doc.lineAt(pos);
+			for (const match of line.text.matchAll(linkRegExp())) {
+				const start = line.from + match.index!;
+				if (pos >= start && pos <= start + match[0].length) {
+					event.preventDefault();
+					onopenlink(linkTarget(match[1]));
+					return true;
+				}
+			}
+			return false;
+		}
+	});
+
+	// Suggests note titles after "[[", and closes the link when one is picked.
+	function linkCompletions(context: CompletionContext): CompletionResult | null {
+		const typed = context.matchBefore(/\[\[[^[\]|\n]*/);
+		if (!typed || !titles) return null;
+		const seen = new Set<string>();
+		const options: Completion[] = [];
+		for (const title of titles()) {
+			const key = title.trim().toLowerCase();
+			if (!key || seen.has(key)) continue;
+			seen.add(key);
+			options.push({
+				label: title.trim(),
+				type: 'text',
+				apply: (view, _completion, from, to) => {
+					const closed = view.state.sliceDoc(to, to + 2) === ']]';
+					const insert = closed ? title.trim() : `${title.trim()}]]`;
+					view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + title.trim().length + 2 } });
+				}
+			});
+		}
+		return { from: typed.from + 2, options, validFor: /^[^[\]|\n]*$/ };
+	}
+
 	const theme = EditorView.theme({
+		'.cm-wikilink': {
+			color: 'var(--accent)',
+			textDecoration: 'underline',
+			textDecorationColor: 'color-mix(in srgb, var(--accent) 40%, transparent)',
+			textUnderlineOffset: '0.2em'
+		},
+		'.cm-tooltip': {
+			backgroundColor: 'var(--paper)',
+			border: '1px solid var(--line)',
+			borderRadius: '6px',
+			boxShadow: '0 6px 20px rgb(0 0 0 / 0.12)',
+			overflow: 'hidden'
+		},
+		'.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-ui)', fontSize: '0.875rem', maxHeight: '14rem' },
+		'.cm-tooltip.cm-tooltip-autocomplete > ul > li': { padding: '0.3rem 0.75rem' },
+		'.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+			backgroundColor: 'var(--accent-soft)',
+			color: 'var(--ink)'
+		},
+		'.cm-completionIcon': { display: 'none' },
+		'.cm-completionMatchedText': { textDecoration: 'none', fontWeight: '600' },
 		'.cm-tag': { color: 'var(--accent)', backgroundColor: 'var(--accent-soft)', borderRadius: '3px' },
 		'&': { height: '100%', color: 'var(--ink)', backgroundColor: 'transparent', fontSize: '15px' },
 		'&.cm-focused': { outline: 'none' },
@@ -132,6 +238,9 @@
 					markdown({ base: markdownLanguage, codeLanguages: languages }),
 					syntaxHighlighting(highlight),
 					tagHighlighter,
+					wikiLinkHighlighter,
+					followLinkOnModClick,
+					autocompletion({ override: [linkCompletions], icons: false }),
 					keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
 					placeholder('Start writing. Markdown works here.'),
 					EditorState.readOnly.of(readonly),

@@ -1,7 +1,8 @@
+import { linksAsText } from './links';
+
 /** Plain-text preview of a Markdown note for the note list. */
 export function snippetFrom(markdown: string, max = 140): string {
-	const text = markdown
-		.slice(0, 1200)
+	const text = linksAsText(markdown.slice(0, 1200))
 		.replace(/```[\s\S]*?(```|$)/g, ' ')
 		.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
 		.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')

@@ -1,4 +1,4 @@
-import type { Note, Notebook, NotePatch, NoteSummary, TagCount, User, View } from './types';
+import type { Backlink, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, User, View } from './types';
 
 export interface NoteQuery {
 	view: View;
@@ -74,6 +74,8 @@ export const api = {
 		request<Notebook>('PATCH', `/notebooks/${encodeURIComponent(id)}`, { name }),
 	deleteNotebook: (id: string) => request<void>('DELETE', `/notebooks/${encodeURIComponent(id)}`),
 	listTags: () => request<{ tags: TagCount[] }>('GET', '/tags'),
+	listTitles: () => request<{ notes: NoteTitle[] }>('GET', '/titles'),
+	listBacklinks: (id: string) => request<{ backlinks: Backlink[] }>('GET', `${notePath(id)}/backlinks`),
 
 	/** Best-effort save while the page is closing; the browser finishes the request for us. */
 	saveOnExit(id: string, patch: NotePatch) {

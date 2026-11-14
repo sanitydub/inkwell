@@ -4,7 +4,8 @@ import { getDb, transaction } from './db';
 import { notebookExists } from './notebooks';
 import { snippetFrom } from '#lib/snippet.ts';
 import { extractTags } from '#lib/tags.ts';
-import type { Note, NoteSummary, TagCount, View } from '#lib/types.ts';
+import { extractLinks, linkRegExp, linkTarget, linksAsText, normalizeTitle } from '#lib/links.ts';
+import type { Backlink, Note, NoteSummary, NoteTitle, TagCount, View } from '#lib/types.ts';
 
 const MAX_TITLE = 500;
 const MAX_CONTENT = 5_000_000;
@@ -104,11 +105,49 @@ function tagsOf(noteId: string): string[] {
 	return (rows as unknown as { tag: string }[]).map((r) => r.tag);
 }
 
-function indexTags(noteId: string, content: string) {
+/** Rebuilds a note's tag and link index from its content. Call inside a transaction. */
+function indexContent(noteId: string, content: string) {
 	const db = getDb();
 	db.prepare('DELETE FROM note_tags WHERE note_id = ?').run(noteId);
-	const insert = db.prepare('INSERT INTO note_tags (note_id, tag) VALUES (?, ?)');
-	for (const tag of extractTags(content)) insert.run(noteId, tag);
+	const insertTag = db.prepare('INSERT INTO note_tags (note_id, tag) VALUES (?, ?)');
+	for (const tag of extractTags(content)) insertTag.run(noteId, tag);
+
+	db.prepare('DELETE FROM note_links WHERE note_id = ?').run(noteId);
+	const insertLink = db.prepare('INSERT INTO note_links (note_id, target) VALUES (?, ?)');
+	for (const target of extractLinks(content)) insertLink.run(noteId, target);
+}
+
+/** Titles of all notes outside the trash, most recently edited first (the order links resolve in). */
+export function listTitles(userId: string): NoteTitle[] {
+	return getDb()
+		.prepare('SELECT id, title FROM notes WHERE user_id = ? AND trashed_at IS NULL ORDER BY updated_at DESC')
+		.all(userId) as unknown as NoteTitle[];
+}
+
+/** Notes outside the trash that [[link]] to this note's title. Null if the note doesn't exist. */
+export function listBacklinks(userId: string, id: string): Backlink[] | null {
+	const note = getDb().prepare('SELECT title FROM notes WHERE id = ? AND user_id = ?').get(id, userId) as
+		| { title: string }
+		| undefined;
+	if (!note) return null;
+	const target = normalizeTitle(note.title);
+	if (!target) return [];
+
+	const rows = getDb()
+		.prepare(
+			`SELECT n.id, n.title, n.content FROM note_links l JOIN notes n ON n.id = l.note_id
+			 WHERE l.target = ? AND n.user_id = ? AND n.trashed_at IS NULL AND n.id != ?
+			 ORDER BY n.updated_at DESC`
+		)
+		.all(target, userId, id) as unknown as { id: string; title: string; content: string }[];
+
+	return rows.map((r) => {
+		const line = r.content
+			.split('\n')
+			.find((l) => [...l.matchAll(linkRegExp())].some((m) => normalizeTitle(linkTarget(m[1])) === target));
+		const context = linksAsText(line ?? '').trim().replace(/\s+/g, ' ');
+		return { id: r.id, title: r.title, context: context.length > 160 ? context.slice(0, 160).trimEnd() + '…' : context };
+	});
 }
 
 /** Tags in use across the user's notes outside the trash. */
@@ -171,7 +210,7 @@ export function createNote(userId: string, body: Record<string, unknown>): Note 
 				'INSERT INTO notes (id, user_id, title, content, notebook_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
 			)
 			.run(note.id, userId, title, content, notebookId, now, now);
-		indexTags(note.id, content);
+		indexContent(note.id, content);
 	});
 	return note;
 }
@@ -216,7 +255,7 @@ export function updateNote(userId: string, id: string, body: Record<string, unkn
 			.prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND user_id = ? RETURNING *`)
 			.get(...params, id, userId) as unknown as NoteRow | undefined;
 		if (!row) return null;
-		if ('content' in body) indexTags(id, row.content);
+		if ('content' in body) indexContent(id, row.content);
 		return toNote(row, tagsOf(id));
 	});
 }

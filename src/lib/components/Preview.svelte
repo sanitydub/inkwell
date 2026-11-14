@@ -1,13 +1,22 @@
 <script lang="ts">
 	import { renderMarkdown } from '#lib/markdown.ts';
 
-	let { source, ontag }: { source: string; ontag?: (tag: string) => void } = $props();
+	interface Props {
+		source: string;
+		/** Normalized titles of existing notes, so links to missing notes can be shown as such. */
+		knownTitles?: ReadonlySet<string>;
+		ontag?: (tag: string) => void;
+		onlink?: (title: string) => void;
+	}
 
-	const html = $derived(renderMarkdown(source));
+	let { source, knownTitles, ontag, onlink }: Props = $props();
+
+	const html = $derived(renderMarkdown(source, knownTitles));
 
 	function onclick(e: MouseEvent) {
-		const button = (e.target as Element).closest<HTMLElement>('button[data-tag]');
+		const button = (e.target as Element).closest<HTMLElement>('button[data-tag], button[data-link]');
 		if (button?.dataset.tag) ontag?.(button.dataset.tag);
+		else if (button?.dataset.link) onlink?.(button.dataset.link);
 	}
 </script>
 
@@ -144,6 +153,22 @@
 	}
 	.prose :global(button.tag:hover) {
 		background: var(--selection);
+	}
+	.prose :global(button.wikilink) {
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		text-decoration: underline;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 0.15em;
+		cursor: pointer;
+	}
+	/* A link to a note that doesn't exist yet: clicking it creates the note. */
+	.prose :global(button.wikilink.missing) {
+		color: var(--muted);
+		text-decoration-style: dashed;
 	}
 	.prose :global(th) {
 		background: var(--panel);
