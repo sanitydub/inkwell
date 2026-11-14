@@ -1,4 +1,11 @@
-import type { Note, NotePatch, NoteSummary, User, View } from './types';
+import type { Note, Notebook, NotePatch, NoteSummary, TagCount, User, View } from './types';
+
+export interface NoteQuery {
+	view: View;
+	q?: string;
+	notebook?: string | null;
+	tag?: string | null;
+}
 
 export class ApiError extends Error {
 	constructor(
@@ -47,13 +54,26 @@ export const api = {
 		request<{ user: User }>('POST', '/auth/login', { username, password }),
 	logout: () => request<void>('POST', '/auth/logout'),
 
-	listNotes: (view: View, q: string) =>
-		request<{ notes: NoteSummary[] }>('GET', `/notes?${new URLSearchParams(q ? { view, q } : { view })}`),
+	listNotes: (query: NoteQuery) => {
+		const params = new URLSearchParams({ view: query.view });
+		if (query.q) params.set('q', query.q);
+		if (query.notebook) params.set('notebook', query.notebook);
+		if (query.tag) params.set('tag', query.tag);
+		return request<{ notes: NoteSummary[] }>('GET', `/notes?${params}`);
+	},
 	getNote: (id: string) => request<Note>('GET', notePath(id)),
-	createNote: (fields: { title?: string; content?: string } = {}) => request<Note>('POST', '/notes', fields),
+	createNote: (fields: { title?: string; content?: string; notebookId?: string | null } = {}) =>
+		request<Note>('POST', '/notes', fields),
 	updateNote: (id: string, patch: NotePatch) => request<Note>('PATCH', notePath(id), patch),
 	deleteNote: (id: string) => request<void>('DELETE', notePath(id)),
 	emptyTrash: () => request<{ deleted: number }>('DELETE', '/trash'),
+
+	listNotebooks: () => request<{ notebooks: Notebook[] }>('GET', '/notebooks'),
+	createNotebook: (name: string) => request<Notebook>('POST', '/notebooks', { name }),
+	renameNotebook: (id: string, name: string) =>
+		request<Notebook>('PATCH', `/notebooks/${encodeURIComponent(id)}`, { name }),
+	deleteNotebook: (id: string) => request<void>('DELETE', `/notebooks/${encodeURIComponent(id)}`),
+	listTags: () => request<{ tags: TagCount[] }>('GET', '/tags'),
 
 	/** Best-effort save while the page is closing; the browser finishes the request for us. */
 	saveOnExit(id: string, patch: NotePatch) {

@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronLeft, Download, Pin, PinOff, RotateCcw, Trash2 } from '@lucide/svelte';
+	import { ChevronDown, ChevronLeft, Download, Notebook as NotebookIcon, Pin, PinOff, RotateCcw, Trash2 } from '@lucide/svelte';
 	import Editor from './Editor.svelte';
 	import Preview from './Preview.svelte';
 	import { longDate } from '#lib/format.ts';
+	import { extractTags } from '#lib/tags.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
 	interface Props {
@@ -26,6 +27,8 @@
 	let titleInput = $state<HTMLInputElement>();
 
 	const note = $derived(ws.current);
+	// Worked out locally so chips update as you type; the server indexes the same thing on save.
+	const tags = $derived(note ? extractTags(note.content) : []);
 	// Notes in the trash are read-only, so show them rendered.
 	const shown = $derived<Mode>(note?.trashed ? 'read' : mode);
 
@@ -156,6 +159,28 @@
 			/>
 		</div>
 
+		<div class="meta">
+			<label class="notebook" class:unfiled={!note.notebookId}>
+				<NotebookIcon size={14} strokeWidth={1.75} />
+				<select
+					aria-label="Notebook"
+					value={note.notebookId ?? ''}
+					disabled={note.trashed}
+					onchange={(e) => ws.moveToNotebook(e.currentTarget.value || null)}
+				>
+					<option value="">No notebook</option>
+					{#each ws.notebooks as nb (nb.id)}
+						<option value={nb.id}>{nb.name}</option>
+					{/each}
+				</select>
+				<span aria-hidden="true">{ws.notebookName(note.notebookId) ?? 'No notebook'}</span>
+				<ChevronDown size={13} />
+			</label>
+			{#each tags as tag (tag)}
+				<button class="tag" onclick={() => ws.showTag(tag)} title="Show notes tagged #{tag}">#{tag}</button>
+			{/each}
+		</div>
+
 		<div class="body">
 			{#if !note.trashed}
 				<!-- Kept mounted while reading so undo history survives switching layouts. -->
@@ -167,7 +192,7 @@
 			{/if}
 			{#if shown !== 'write'}
 				<div class="read">
-					<Preview source={note.content} />
+					<Preview source={note.content} ontag={(tag) => ws.showTag(tag)} />
 				</div>
 			{/if}
 		</div>
@@ -279,6 +304,65 @@
 	}
 	.title::placeholder {
 		color: var(--faint);
+	}
+
+	.meta {
+		flex: none;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0 var(--gutter) 1rem;
+	}
+	.mode-split .meta {
+		padding-inline: 1.5rem;
+	}
+	.notebook {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		height: 1.6rem;
+		padding: 0 0.5rem;
+		border-radius: 999px;
+		background: var(--panel);
+		color: var(--ink);
+		font-size: 0.8rem;
+		font-weight: 500;
+	}
+	.notebook.unfiled {
+		color: var(--muted);
+	}
+	.notebook:hover {
+		background: var(--panel-strong);
+	}
+	.notebook:focus-within {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	/* The native select covers the pill so it stays fully keyboard and screen-reader friendly. */
+	.notebook select {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		opacity: 0;
+		cursor: pointer;
+	}
+	.notebook select:disabled {
+		cursor: default;
+	}
+	.tag {
+		height: 1.6rem;
+		padding: 0 0.55rem;
+		border: 0;
+		border-radius: 999px;
+		background: var(--accent-soft);
+		color: var(--accent);
+		font-size: 0.8rem;
+		font-weight: 500;
+	}
+	.tag:hover {
+		background: var(--selection);
 	}
 
 	.body {

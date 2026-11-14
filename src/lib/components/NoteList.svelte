@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Menu, Pin, Plus, Search } from '@lucide/svelte';
+	import { tick } from 'svelte';
+	import { Menu, Pencil, Pin, Plus, Search, Trash2 } from '@lucide/svelte';
 	import { shortDate } from '#lib/format.ts';
-	import type { View } from '#lib/types.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
 	interface Props {
@@ -12,7 +12,43 @@
 
 	let { ws, onopenmenu, searchInput = $bindable() }: Props = $props();
 
-	const headings: Record<View, string> = { all: 'All notes', pinned: 'Pinned', trash: 'Trash' };
+	// ---- Renaming the notebook being viewed ----------------------------------
+
+	let renaming = $state(false);
+	let draftName = $state('');
+	let renameInput = $state<HTMLInputElement>();
+	let submitting = false;
+
+	async function startRename() {
+		draftName = ws.heading;
+		renaming = true;
+		await tick();
+		renameInput?.select();
+	}
+
+	async function finishRename() {
+		const id = ws.notebookId;
+		const name = draftName.trim();
+		// Called on Enter and on blur; removing the input after success also blurs it.
+		if (submitting || !renaming || !id) return;
+		if (!name || name === ws.heading) {
+			renaming = false;
+			return;
+		}
+		submitting = true;
+		const ok = await ws.renameNotebook(id, name);
+		submitting = false;
+		if (ok) renaming = false;
+		else renameInput?.focus();
+	}
+
+	function confirmDeleteNotebook() {
+		const id = ws.notebookId;
+		if (!id) return;
+		const n = ws.notebooks.find((nb) => nb.id === id)?.noteCount ?? 0;
+		const notes = n === 0 ? '' : n === 1 ? ' Its note stays in All notes.' : ` Its ${n} notes stay in All notes.`;
+		if (confirm(`Delete the notebook “${ws.heading}”?${notes}`)) ws.deleteNotebook(id);
+	}
 
 	function confirmEmptyTrash() {
 		const n = ws.notes.length;
@@ -28,7 +64,34 @@
 			<button class="icon-btn menu" onclick={onopenmenu} aria-label="Open menu">
 				<Menu size={18} />
 			</button>
-			<h1>{headings[ws.view]}</h1>
+			{#if renaming}
+				<form
+					class="rename"
+					onsubmit={(e) => {
+						e.preventDefault();
+						finishRename();
+					}}
+				>
+					<input
+						bind:this={renameInput}
+						bind:value={draftName}
+						aria-label="Notebook name"
+						maxlength="100"
+						onblur={finishRename}
+						onkeydown={(e) => e.key === 'Escape' && (renaming = false)}
+					/>
+				</form>
+			{:else}
+				<h1 title={ws.heading}>{ws.heading}</h1>
+			{/if}
+			{#if ws.notebookId && !renaming}
+				<button class="icon-btn" onclick={startRename} aria-label="Rename notebook" title="Rename notebook">
+					<Pencil size={15} />
+				</button>
+				<button class="icon-btn" onclick={confirmDeleteNotebook} aria-label="Delete notebook" title="Delete notebook">
+					<Trash2 size={15} />
+				</button>
+			{/if}
 			{#if ws.view === 'trash'}
 				<button class="btn danger" disabled={!ws.notes.length} onclick={confirmEmptyTrash}>Empty trash</button>
 			{:else}
@@ -60,6 +123,11 @@
 			<div class="empty">
 				{#if ws.query.trim()}
 					<p>No notes match “{ws.query.trim()}”.</p>
+				{:else if ws.notebookId}
+					<p>This notebook is empty.</p>
+					<button class="btn" onclick={() => ws.create()}>Write a note in it</button>
+				{:else if ws.tag}
+					<p>No notes are tagged #{ws.tag} any more.</p>
 				{:else if ws.view === 'trash'}
 					<p>The trash is empty. Notes you delete wait here until you remove them for good.</p>
 				{:else if ws.view === 'pinned'}
@@ -114,8 +182,26 @@
 	}
 	h1 {
 		flex: 1;
+		min-width: 0;
 		margin: 0 0 0 0.25rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-size: 1rem;
+		font-weight: 600;
+	}
+	.rename {
+		flex: 1;
+		min-width: 0;
+	}
+	.rename input {
+		width: 100%;
+		height: 2rem;
+		padding: 0 0.5rem;
+		border: 1px solid var(--accent);
+		border-radius: var(--radius);
+		outline: none;
+		background: var(--paper);
 		font-weight: 600;
 	}
 	.menu {

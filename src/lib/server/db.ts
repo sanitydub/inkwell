@@ -2,9 +2,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { DATA_DIR } from '$app/env/private';
+import { extractTags } from '#lib/tags.ts';
 
 // Each entry runs once, in order. Never edit a shipped migration; append a new one.
-const migrations: string[] = [
+// An entry is SQL, or a function for changes that need code (like backfilling data).
+const migrations: (string | ((db: DatabaseSync) => void))[] = [
 	`
 	CREATE TABLE users (
 		id            TEXT PRIMARY KEY,
@@ -51,7 +53,36 @@ const migrations: string[] = [
 		INSERT INTO notes_fts(notes_fts, rowid, title, content) VALUES ('delete', old.seq, old.title, old.content);
 		INSERT INTO notes_fts(rowid, title, content) VALUES (new.seq, new.title, new.content);
 	END;
-	`
+	`,
+
+	// 2: flat notebooks and inline #tags.
+	(db) => {
+		db.exec(`
+			CREATE TABLE notebooks (
+				id         TEXT PRIMARY KEY,
+				user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				name       TEXT NOT NULL COLLATE NOCASE,
+				created_at INTEGER NOT NULL,
+				UNIQUE (user_id, name)
+			);
+
+			-- Deleting a notebook keeps its notes; they just lose the notebook.
+			ALTER TABLE notes ADD COLUMN notebook_id TEXT REFERENCES notebooks(id) ON DELETE SET NULL;
+			CREATE INDEX notes_notebook ON notes(notebook_id);
+
+			-- Tags are parsed from note content on save; this is just an index of them.
+			CREATE TABLE note_tags (
+				note_id TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+				tag     TEXT NOT NULL,
+				PRIMARY KEY (note_id, tag)
+			) WITHOUT ROWID;
+			CREATE INDEX note_tags_tag ON note_tags(tag);
+		`);
+		const insert = db.prepare('INSERT INTO note_tags (note_id, tag) VALUES (?, ?)');
+		for (const row of db.prepare('SELECT id, content FROM notes').all() as { id: string; content: string }[]) {
+			for (const tag of extractTags(row.content)) insert.run(row.id, tag);
+		}
+	}
 ];
 
 let db: DatabaseSync | undefined;
@@ -72,12 +103,28 @@ function migrate(db: DatabaseSync) {
 	for (let v = user_version; v < migrations.length; v++) {
 		db.exec('BEGIN');
 		try {
-			db.exec(migrations[v]);
+			const step = migrations[v];
+			if (typeof step === 'string') db.exec(step);
+			else step(db);
 			db.exec(`PRAGMA user_version = ${v + 1}`);
 			db.exec('COMMIT');
 		} catch (err) {
 			db.exec('ROLLBACK');
 			throw err;
 		}
+	}
+}
+
+/** Runs fn inside a transaction, rolling back if it throws. Not re-entrant. */
+export function transaction<T>(fn: () => T): T {
+	const db = getDb();
+	db.exec('BEGIN');
+	try {
+		const result = fn();
+		db.exec('COMMIT');
+		return result;
+	} catch (err) {
+		db.exec('ROLLBACK');
+		throw err;
 	}
 }

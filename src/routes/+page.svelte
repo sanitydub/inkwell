@@ -16,6 +16,7 @@
 
 	onMount(() => {
 		ws.refresh();
+		ws.refreshSidebar();
 		const id = new URL(location.href).searchParams.get('note');
 		if (id) ws.open(id);
 

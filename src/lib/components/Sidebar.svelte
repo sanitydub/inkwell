@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { FileText, LogOut, Monitor, Moon, Pin, Sun, Trash2 } from '@lucide/svelte';
+	import { onMount, tick } from 'svelte';
+	import { FileText, Hash, LogOut, Monitor, Moon, Notebook as NotebookIcon, Pin, Plus, Sun, Trash2 } from '@lucide/svelte';
 	import type { User, View } from '#lib/types.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
@@ -18,6 +18,49 @@
 		{ id: 'pinned', label: 'Pinned', icon: Pin },
 		{ id: 'trash', label: 'Trash', icon: Trash2 }
 	];
+
+	const isViewActive = (id: View) => ws.view === id && !ws.notebookId && !ws.tag;
+
+	function go(action: () => unknown) {
+		action();
+		onnavigate?.();
+	}
+
+	// ---- New notebook (inline input) ----------------------------------------
+
+	let creating = $state(false);
+	let newName = $state('');
+	let submitting = false;
+	let nameInput = $state<HTMLInputElement>();
+
+	async function startCreate() {
+		creating = true;
+		newName = '';
+		await tick();
+		nameInput?.focus();
+	}
+
+	// Called on Enter and on blur; removing the input after success also blurs it, hence the guards.
+	async function finishCreate() {
+		if (submitting || !creating) return;
+		const name = newName.trim();
+		if (!name) {
+			creating = false;
+			return;
+		}
+		submitting = true;
+		const ok = await ws.createNotebook(name);
+		submitting = false;
+		if (ok) {
+			newName = '';
+			creating = false;
+			onnavigate?.();
+		} else {
+			nameInput?.focus();
+		}
+	}
+
+	// ---- Theme ----------------------------------------------------------------
 
 	type Theme = 'system' | 'light' | 'dark';
 	const THEME_KEY = 'inkwell-theme';
@@ -55,23 +98,93 @@
 <nav class="sidebar" aria-label="Notes">
 	<p class="brand">Inkwell</p>
 
-	<ul class="views">
-		{#each views as v (v.id)}
-			<li>
-				<button
-					class="view"
-					aria-current={ws.view === v.id ? 'page' : undefined}
-					onclick={() => {
-						ws.setView(v.id);
-						onnavigate?.();
-					}}
-				>
-					<v.icon size={16} strokeWidth={1.75} />
-					{v.label}
+	<div class="scroll">
+		<ul class="items">
+			{#each views as v (v.id)}
+				<li>
+					<button class="item" aria-current={isViewActive(v.id) ? 'page' : undefined} onclick={() => go(() => ws.setView(v.id))}>
+						<v.icon size={16} strokeWidth={1.75} />
+						<span class="name">{v.label}</span>
+					</button>
+				</li>
+			{/each}
+		</ul>
+
+		<section class="group" aria-labelledby="notebooks-heading">
+			<div class="group-head">
+				<h2 id="notebooks-heading">Notebooks</h2>
+				<button class="icon-btn add" onclick={startCreate} aria-label="New notebook" title="New notebook">
+					<Plus size={15} />
 				</button>
-			</li>
-		{/each}
-	</ul>
+			</div>
+			<ul class="items">
+				{#each ws.notebooks as nb (nb.id)}
+					<li>
+						<button
+							class="item"
+							aria-current={ws.notebookId === nb.id ? 'page' : undefined}
+							onclick={() => go(() => ws.showNotebook(nb.id))}
+						>
+							<NotebookIcon size={16} strokeWidth={1.75} />
+							<span class="name">{nb.name}</span>
+							{#if nb.noteCount}<span class="count">{nb.noteCount}</span>{/if}
+						</button>
+					</li>
+				{/each}
+				{#if creating}
+					<li>
+						<form
+							class="new"
+							onsubmit={(e) => {
+								e.preventDefault();
+								finishCreate();
+							}}
+						>
+							<NotebookIcon size={16} strokeWidth={1.75} />
+							<input
+								bind:this={nameInput}
+								bind:value={newName}
+								placeholder="Notebook name"
+								aria-label="New notebook name"
+								maxlength="100"
+								onblur={finishCreate}
+								onkeydown={(e) => {
+									if (e.key === 'Escape') {
+										newName = '';
+										creating = false;
+									}
+								}}
+							/>
+						</form>
+					</li>
+				{/if}
+			</ul>
+			{#if !ws.notebooks.length && !creating}
+				<p class="hint">Use <span aria-hidden="true">+</span><span class="visually-hidden">New notebook</span> to group related notes.</p>
+			{/if}
+		</section>
+
+		<section class="group" aria-labelledby="tags-heading">
+			<div class="group-head">
+				<h2 id="tags-heading">Tags</h2>
+			</div>
+			{#if ws.tags.length}
+				<ul class="items">
+					{#each ws.tags as t (t.name)}
+						<li>
+							<button class="item tag" aria-current={ws.tag === t.name ? 'page' : undefined} onclick={() => go(() => ws.showTag(t.name))}>
+								<Hash size={15} strokeWidth={1.75} />
+								<span class="name">{t.name}</span>
+								<span class="count">{t.noteCount}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{:else}
+				<p class="hint">Type a word starting with # in any note, like #recipes, to tag it.</p>
+			{/if}
+		</section>
+	</div>
 
 	<div class="foot">
 		<span class="user" title="Signed in as {user.username}">{user.username}</span>
@@ -96,10 +209,10 @@
 		flex-direction: column;
 		height: 100%;
 		background: var(--panel);
-		padding: 0.75rem 0.6rem;
+		padding: 0.75rem 0 0.75rem;
 	}
 	.brand {
-		margin: 0.35rem 0.6rem 1.4rem;
+		margin: 0.35rem 1.2rem 1.4rem;
 		font-family: var(--font-serif);
 		font-style: italic;
 		font-size: 1.55rem;
@@ -107,14 +220,21 @@
 		line-height: 1;
 		letter-spacing: -0.01em;
 	}
-	.views {
+	.scroll {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 0 0.6rem 1rem;
+	}
+	.items {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
 		gap: 2px;
 	}
-	.view {
+	.item,
+	.new {
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
@@ -128,20 +248,77 @@
 		font-size: 0.9rem;
 		text-align: left;
 	}
-	.view:hover {
+	.item :global(svg) {
+		flex: none;
+	}
+	.item:hover {
 		background: var(--panel-strong);
 		color: var(--ink);
 	}
-	.view[aria-current='page'] {
+	.item[aria-current='page'] {
 		background: var(--panel-strong);
 		color: var(--ink);
 		font-weight: 600;
 	}
+	.name {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.count {
+		color: var(--faint);
+		font-size: 0.75rem;
+		font-weight: 500;
+		font-variant-numeric: tabular-nums;
+	}
+	.new {
+		background: var(--paper);
+		box-shadow: 0 0 0 1px var(--accent);
+	}
+	.new input {
+		flex: 1;
+		min-width: 0;
+		border: 0;
+		outline: none;
+		background: transparent;
+		color: var(--ink);
+	}
+
+	.group {
+		margin-top: 1.4rem;
+	}
+	.group-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		height: 1.75rem;
+		margin-bottom: 0.2rem;
+		padding-left: 0.6rem;
+	}
+	h2 {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.78rem;
+		font-weight: 600;
+	}
+	.add {
+		width: 1.75rem;
+		height: 1.75rem;
+	}
+	.hint {
+		margin: 0.15rem 0.6rem 0;
+		color: var(--muted);
+		font-size: 0.8rem;
+		line-height: 1.4;
+	}
+
 	.foot {
-		margin-top: auto;
 		display: flex;
 		align-items: center;
 		gap: 0.15rem;
+		margin: 0 0.6rem;
 		padding: 0.6rem 0 0 0.6rem;
 		border-top: 1px solid var(--line);
 	}

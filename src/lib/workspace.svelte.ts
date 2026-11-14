@@ -1,6 +1,6 @@
 import { api, ApiError } from './api';
 import { snippetFrom } from './snippet';
-import type { Note, NotePatch, NoteSummary, View } from './types';
+import type { Note, Notebook, NotePatch, NoteSummary, TagCount, View } from './types';
 
 export type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -8,12 +8,21 @@ const SAVE_DELAY = 600;
 const RETRY_DELAY = 5000;
 const SEARCH_DELAY = 180;
 
-/** All client-side state for the notes screen: the list, the open note, and autosave. */
+const VIEW_NAMES: Record<View, string> = { all: 'All notes', pinned: 'Pinned', trash: 'Trash' };
+
+/** All client-side state for the notes screen: filters, the list, the open note, and autosave. */
 export class Workspace {
+	// What the list shows: a view, optionally narrowed to one notebook or one tag.
 	view = $state<View>('all');
+	notebookId = $state<string | null>(null);
+	tag = $state<string | null>(null);
 	query = $state('');
+
 	notes = $state<NoteSummary[]>([]);
 	loading = $state(true);
+	notebooks = $state<Notebook[]>([]);
+	tags = $state<TagCount[]>([]);
+
 	current = $state<Note | null>(null);
 	saveState = $state<SaveState>('idle');
 	message = $state<string | null>(null);
@@ -30,10 +39,28 @@ export class Workspace {
 		return this.#dirty;
 	}
 
+	/** Name of what the list is showing, e.g. "All notes", a notebook's name, or "#recipes". */
+	get heading(): string {
+		if (this.notebookId) return this.notebooks.find((n) => n.id === this.notebookId)?.name ?? 'Notebook';
+		if (this.tag) return `#${this.tag}`;
+		return VIEW_NAMES[this.view];
+	}
+
+	notebookName(id: string | null): string | null {
+		return (id && this.notebooks.find((n) => n.id === id)?.name) || null;
+	}
+
+	// ---- Loading ------------------------------------------------------------
+
 	async refresh() {
 		const seq = ++this.#listSeq;
 		try {
-			const { notes } = await api.listNotes(this.view, this.query.trim());
+			const { notes } = await api.listNotes({
+				view: this.view,
+				q: this.query.trim(),
+				notebook: this.notebookId,
+				tag: this.tag
+			});
 			if (seq === this.#listSeq) this.notes = notes;
 		} catch (err) {
 			if (seq === this.#listSeq) this.#fail(err);
@@ -42,12 +69,37 @@ export class Workspace {
 		}
 	}
 
-	async setView(view: View) {
-		if (view === this.view) return;
+	/** Reloads the sidebar's notebooks and tags (and their counts). */
+	async refreshSidebar() {
+		try {
+			const [{ notebooks }, { tags }] = await Promise.all([api.listNotebooks(), api.listTags()]);
+			this.notebooks = notebooks;
+			this.tags = tags;
+		} catch (err) {
+			this.#fail(err);
+		}
+	}
+
+	async #show(view: View, notebookId: string | null, tag: string | null) {
+		if (view === this.view && notebookId === this.notebookId && tag === this.tag) return;
 		this.view = view;
+		this.notebookId = notebookId;
+		this.tag = tag;
 		this.notes = [];
 		this.loading = true;
 		await this.refresh();
+	}
+
+	setView(view: View) {
+		return this.#show(view, null, null);
+	}
+
+	showNotebook(id: string) {
+		return this.#show('all', id, null);
+	}
+
+	showTag(tag: string) {
+		return this.#show('all', null, tag);
 	}
 
 	setQuery(query: string) {
@@ -55,6 +107,8 @@ export class Workspace {
 		clearTimeout(this.#searchTimer);
 		this.#searchTimer = setTimeout(() => this.refresh(), SEARCH_DELAY);
 	}
+
+	// ---- Notes --------------------------------------------------------------
 
 	async open(id: string) {
 		if (this.current?.id === id) return;
@@ -72,16 +126,20 @@ export class Workspace {
 		this.current = null;
 	}
 
+	/** Creates a note in whatever notebook or tag is being viewed, so it shows up in the list. */
 	async create() {
 		await this.flush();
 		this.query = '';
-		if (this.view === 'trash') this.view = 'all';
+		if (this.view !== 'all') this.view = 'all';
 		try {
-			const note = await api.createNote();
+			const note = await api.createNote({
+				notebookId: this.notebookId,
+				content: this.tag ? `#${this.tag} ` : ''
+			});
 			this.current = note;
 			this.saveState = 'idle';
 			this.freshNoteId = note.id;
-			await this.refresh();
+			await Promise.all([this.refresh(), this.refreshSidebar()]);
 		} catch (err) {
 			this.#fail(err);
 		}
@@ -127,10 +185,13 @@ export class Workspace {
 		this.saveState = 'saving';
 		try {
 			const saved = await api.updateNote(note.id, { title: note.title, content: note.content });
+			const tagsChanged = saved.tags.join('\n') !== note.tags.join('\n');
 			note.updatedAt = saved.updatedAt;
+			note.tags = saved.tags;
 			const summary = this.notes.find((n) => n.id === note.id);
 			if (summary) summary.updatedAt = saved.updatedAt;
 			if (!this.#dirty) this.saveState = 'saved';
+			if (tagsChanged) this.refreshSidebar();
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 404) {
 				this.message = 'This note was deleted somewhere else, so your latest edits weren’t saved.';
@@ -153,9 +214,13 @@ export class Workspace {
 		try {
 			const saved = await api.updateNote(note.id, patch);
 			if (this.current?.id === note.id) {
-				Object.assign(this.current, { pinned: saved.pinned, trashed: saved.trashed });
+				Object.assign(this.current, {
+					pinned: saved.pinned,
+					trashed: saved.trashed,
+					notebookId: saved.notebookId
+				});
 			}
-			await this.refresh();
+			await Promise.all([this.refresh(), this.refreshSidebar()]);
 			return saved;
 		} catch (err) {
 			this.#fail(err);
@@ -165,6 +230,10 @@ export class Workspace {
 
 	togglePin() {
 		return this.#patch({ pinned: !this.current?.pinned });
+	}
+
+	moveToNotebook(notebookId: string | null) {
+		return this.#patch({ notebookId });
 	}
 
 	async moveToTrash() {
@@ -181,7 +250,7 @@ export class Workspace {
 		try {
 			await api.deleteNote(note.id);
 			this.current = null;
-			await this.refresh();
+			await Promise.all([this.refresh(), this.refreshSidebar()]);
 		} catch (err) {
 			this.#fail(err);
 		}
@@ -192,6 +261,44 @@ export class Workspace {
 			await api.emptyTrash();
 			if (this.current?.trashed) this.current = null;
 			await this.refresh();
+		} catch (err) {
+			this.#fail(err);
+		}
+	}
+
+	// ---- Notebooks ----------------------------------------------------------
+
+	/** Creates a notebook and shows it. Returns false (with a message shown) if it failed. */
+	async createNotebook(name: string): Promise<boolean> {
+		try {
+			const notebook = await api.createNotebook(name);
+			await this.refreshSidebar();
+			await this.showNotebook(notebook.id);
+			return true;
+		} catch (err) {
+			this.#fail(err);
+			return false;
+		}
+	}
+
+	async renameNotebook(id: string, name: string): Promise<boolean> {
+		try {
+			await api.renameNotebook(id, name);
+			await this.refreshSidebar();
+			return true;
+		} catch (err) {
+			this.#fail(err);
+			return false;
+		}
+	}
+
+	/** Deletes the notebook; its notes stay in All notes. */
+	async deleteNotebook(id: string) {
+		try {
+			await api.deleteNotebook(id);
+			if (this.current?.notebookId === id) this.current.notebookId = null;
+			if (this.notebookId === id) await this.setView('all');
+			await this.refreshSidebar();
 		} catch (err) {
 			this.#fail(err);
 		}

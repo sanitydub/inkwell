@@ -4,6 +4,7 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 
 - Markdown editor (CodeMirror) with Write, Split and Read layouts
 - Full-text search with prefix matching
+- Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
 - Pin notes, move them to the trash, restore them, or delete them for good
 - Download any note as a `.md` file
 - Multiple accounts per server, each with private notes
@@ -85,13 +86,20 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `POST`   | `/api/auth/login`     | `{ username, password }`                      |
 | `POST`   | `/api/auth/logout`    |                                               |
 | `GET`    | `/api/me`             |                                               |
-| `GET`    | `/api/notes`          | `?view=all\|pinned\|trash&q=search words`     |
-| `POST`   | `/api/notes`          | `{ title?, content? }`                        |
+| `GET`    | `/api/notes`          | `?view=all\|pinned\|trash&q=…&notebook=<id>&tag=<name>` |
+| `POST`   | `/api/notes`          | `{ title?, content?, notebookId? }`           |
 | `GET`    | `/api/notes/:id`      |                                               |
-| `PATCH`  | `/api/notes/:id`      | any of `{ title, content, pinned, trashed }`  |
+| `PATCH`  | `/api/notes/:id`      | any of `{ title, content, notebookId, pinned, trashed }` |
 | `DELETE` | `/api/notes/:id`      | permanent                                     |
 | `DELETE` | `/api/trash`          | empties the trash                             |
+| `GET`    | `/api/notebooks`      | notebooks with note counts                    |
+| `POST`   | `/api/notebooks`      | `{ name }`                                    |
+| `PATCH`  | `/api/notebooks/:id`  | `{ name }`                                    |
+| `DELETE` | `/api/notebooks/:id`  | its notes are kept, without a notebook        |
+| `GET`    | `/api/tags`           | tags in use, with note counts                 |
 | `GET`    | `/api/health`         |                                               |
+
+Tags are read from `#words` in note content on every save (ignoring code), so there's no tag endpoint to write to. Filtering by `tag=project` also matches nested tags like `project/inkwell`.
 
 Errors look like `{ "status": 404, "message": "…" }`.
 

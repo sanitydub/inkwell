@@ -1,14 +1,25 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { EditorState } from '@codemirror/state';
-	import { EditorView, drawSelection, keymap, placeholder } from '@codemirror/view';
+	import {
+		Decoration,
+		EditorView,
+		MatchDecorator,
+		ViewPlugin,
+		drawSelection,
+		keymap,
+		placeholder,
+		type DecorationSet,
+		type ViewUpdate
+	} from '@codemirror/view';
 	import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-	import { HighlightStyle, indentOnInput, syntaxHighlighting } from '@codemirror/language';
+	import { HighlightStyle, indentOnInput, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 	import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 	import { languages } from '@codemirror/language-data';
 	import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 	import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 	import { tags as t } from '@lezer/highlight';
+	import { tagRegExp } from '#lib/tags.ts';
 
 	interface Props {
 		value: string;
@@ -45,7 +56,32 @@
 		{ tag: t.comment, color: 'var(--faint)', fontStyle: 'italic' }
 	]);
 
+	// Highlights #tags, skipping code and links (same rules as the server's tag index).
+	const tagMark = Decoration.mark({ class: 'cm-tag' });
+	const tagMatcher = new MatchDecorator({
+		regexp: tagRegExp(),
+		decorate: (add, from, to, _match, view) => {
+			for (let node: { name: string; parent: unknown } | null = syntaxTree(view.state).resolveInner(from, 1); node; node = node.parent as typeof node) {
+				if (/Code|URL|Link|HTML/.test(node.name)) return;
+			}
+			add(from, to, tagMark);
+		}
+	});
+	const tagHighlighter = ViewPlugin.fromClass(
+		class {
+			decorations: DecorationSet;
+			constructor(view: EditorView) {
+				this.decorations = tagMatcher.createDeco(view);
+			}
+			update(update: ViewUpdate) {
+				this.decorations = tagMatcher.updateDeco(update, this.decorations);
+			}
+		},
+		{ decorations: (plugin) => plugin.decorations }
+	);
+
 	const theme = EditorView.theme({
+		'.cm-tag': { color: 'var(--accent)', backgroundColor: 'var(--accent-soft)', borderRadius: '3px' },
 		'&': { height: '100%', color: 'var(--ink)', backgroundColor: 'transparent', fontSize: '15px' },
 		'&.cm-focused': { outline: 'none' },
 		'.cm-scroller': {
@@ -95,6 +131,7 @@
 					EditorView.lineWrapping,
 					markdown({ base: markdownLanguage, codeLanguages: languages }),
 					syntaxHighlighting(highlight),
+					tagHighlighter,
 					keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
 					placeholder('Start writing. Markdown works here.'),
 					EditorState.readOnly.of(readonly),

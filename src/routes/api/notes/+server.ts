@@ -2,14 +2,25 @@ import { error, json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { readJson, requireUser } from '#lib/server/http.ts';
 import { createNote, isView, listNotes } from '#lib/server/notes.ts';
+import { normalizeTag } from '#lib/tags.ts';
 
-// GET /api/notes?view=all|pinned|trash&q=search+words
+// GET /api/notes?view=all|pinned|trash&q=search+words&notebook=<id>&tag=<name>
 export const GET: RequestHandler = (event) => {
 	const user = requireUser(event);
-	const view = event.url.searchParams.get('view') ?? 'all';
+	const params = event.url.searchParams;
+	const view = params.get('view') ?? 'all';
 	if (!isView(view)) error(400, 'view must be one of: all, pinned, trash.');
-	const q = (event.url.searchParams.get('q') ?? '').slice(0, 200);
-	return json({ notes: listNotes(user.id, view, q) });
+	const rawTag = params.get('tag');
+	const tag = rawTag === null ? null : normalizeTag(rawTag);
+	if (rawTag !== null && !tag) error(400, `"${rawTag}" isn’t a valid tag.`);
+	return json({
+		notes: listNotes(user.id, {
+			view,
+			q: (params.get('q') ?? '').slice(0, 200),
+			notebookId: params.get('notebook'),
+			tag
+		})
+	});
 };
 
 export const POST: RequestHandler = async (event) => {

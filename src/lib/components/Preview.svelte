@@ -1,12 +1,19 @@
 <script lang="ts">
 	import { renderMarkdown } from '#lib/markdown.ts';
 
-	let { source }: { source: string } = $props();
+	let { source, ontag }: { source: string; ontag?: (tag: string) => void } = $props();
 
 	const html = $derived(renderMarkdown(source));
+
+	function onclick(e: MouseEvent) {
+		const button = (e.target as Element).closest<HTMLElement>('button[data-tag]');
+		if (button?.dataset.tag) ontag?.(button.dataset.tag);
+	}
 </script>
 
-<article class="prose">
+<!-- Clicks on #tag buttons inside the rendered note bubble up to here. -->
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+<article class="prose" {onclick}>
 	{#if source.trim()}
 		<!-- Sanitised with DOMPurify in renderMarkdown. -->
 		{@html html}
@@ -124,6 +131,19 @@
 		border: 1px solid var(--line);
 		padding: 0.4em 0.7em;
 		text-align: left;
+	}
+	.prose :global(button.tag) {
+		padding: 0 0.15em;
+		border: 0;
+		border-radius: 3px;
+		background: var(--accent-soft);
+		color: var(--accent);
+		font: inherit;
+		font-size: 0.9em;
+		cursor: pointer;
+	}
+	.prose :global(button.tag:hover) {
+		background: var(--selection);
 	}
 	.prose :global(th) {
 		background: var(--panel);

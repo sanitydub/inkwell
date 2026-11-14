@@ -1,8 +1,10 @@
 import { error } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
-import { getDb } from './db';
+import { getDb, transaction } from './db';
+import { notebookExists } from './notebooks';
 import { snippetFrom } from '#lib/snippet.ts';
-import type { Note, NoteSummary, View } from '#lib/types.ts';
+import { extractTags } from '#lib/tags.ts';
+import type { Note, NoteSummary, TagCount, View } from '#lib/types.ts';
 
 const MAX_TITLE = 500;
 const MAX_CONTENT = 5_000_000;
@@ -13,16 +15,19 @@ interface NoteRow {
 	content: string;
 	pinned: number;
 	trashed_at: number | null;
+	notebook_id: string | null;
 	created_at: number;
 	updated_at: number;
 }
 
-const toNote = (r: NoteRow): Note => ({
+const toNote = (r: NoteRow, tags: string[]): Note => ({
 	id: r.id,
 	title: r.title,
 	content: r.content,
 	pinned: r.pinned === 1,
 	trashed: r.trashed_at !== null,
+	notebookId: r.notebook_id,
+	tags,
 	createdAt: r.created_at,
 	updatedAt: r.updated_at
 });
@@ -33,6 +38,7 @@ const toSummary = (r: NoteRow): NoteSummary => ({
 	snippet: snippetFrom(r.content),
 	pinned: r.pinned === 1,
 	trashed: r.trashed_at !== null,
+	notebookId: r.notebook_id,
 	updatedAt: r.updated_at
 });
 
@@ -53,29 +59,75 @@ function ftsQuery(q: string): string | null {
 
 // The list only needs the start of each note for its snippet.
 const LIST_COLS =
-	'n.id, n.title, substr(n.content, 1, 1200) AS content, n.pinned, n.trashed_at, n.created_at, n.updated_at';
+	'n.id, n.title, substr(n.content, 1, 1200) AS content, n.pinned, n.trashed_at, n.notebook_id, n.created_at, n.updated_at';
 
-export function listNotes(userId: string, view: View, q = ''): NoteSummary[] {
-	const db = getDb();
-	const { where, order } = VIEWS[view];
-	const match = ftsQuery(q);
+export interface NoteFilter {
+	view: View;
+	q?: string;
+	notebookId?: string | null;
+	/** Matches the tag and anything nested under it: "project" also finds "project/inkwell". */
+	tag?: string | null;
+}
+
+export function listNotes(userId: string, filter: NoteFilter): NoteSummary[] {
+	const where = ['n.user_id = ?', VIEWS[filter.view].where];
+	const params: string[] = [userId];
+	if (filter.notebookId) {
+		where.push('n.notebook_id = ?');
+		params.push(filter.notebookId);
+	}
+	if (filter.tag) {
+		where.push(
+			`EXISTS (SELECT 1 FROM note_tags t WHERE t.note_id = n.id
+			 AND (t.tag = ? OR substr(t.tag, 1, length(?) + 1) = ? || '/'))`
+		);
+		params.push(filter.tag, filter.tag, filter.tag);
+	}
+
+	const match = ftsQuery(filter.q ?? '');
 	const rows = match
-		? db
+		? getDb()
 				.prepare(
 					`SELECT ${LIST_COLS} FROM notes_fts JOIN notes n ON n.seq = notes_fts.rowid
-					 WHERE notes_fts MATCH ? AND n.user_id = ? AND ${where}
+					 WHERE notes_fts MATCH ? AND ${where.join(' AND ')}
 					 ORDER BY bm25(notes_fts, 4.0, 1.0) LIMIT 200`
 				)
-				.all(match, userId)
-		: db
-				.prepare(`SELECT ${LIST_COLS} FROM notes n WHERE n.user_id = ? AND ${where} ORDER BY ${order}`)
-				.all(userId);
+				.all(match, ...params)
+		: getDb()
+				.prepare(`SELECT ${LIST_COLS} FROM notes n WHERE ${where.join(' AND ')} ORDER BY ${VIEWS[filter.view].order}`)
+				.all(...params);
 	return (rows as unknown as NoteRow[]).map(toSummary);
+}
+
+function tagsOf(noteId: string): string[] {
+	const rows = getDb().prepare('SELECT tag FROM note_tags WHERE note_id = ? ORDER BY tag').all(noteId);
+	return (rows as unknown as { tag: string }[]).map((r) => r.tag);
+}
+
+function indexTags(noteId: string, content: string) {
+	const db = getDb();
+	db.prepare('DELETE FROM note_tags WHERE note_id = ?').run(noteId);
+	const insert = db.prepare('INSERT INTO note_tags (note_id, tag) VALUES (?, ?)');
+	for (const tag of extractTags(content)) insert.run(noteId, tag);
+}
+
+/** Tags in use across the user's notes outside the trash. */
+export function listTags(userId: string): TagCount[] {
+	const rows = getDb()
+		.prepare(
+			`SELECT t.tag AS name, COUNT(*) AS note_count FROM note_tags t JOIN notes n ON n.id = t.note_id
+			 WHERE n.user_id = ? AND n.trashed_at IS NULL GROUP BY t.tag ORDER BY t.tag`
+		)
+		.all(userId);
+	return (rows as unknown as { name: string; note_count: number }[]).map((r) => ({
+		name: r.name,
+		noteCount: Number(r.note_count)
+	}));
 }
 
 export function getNote(userId: string, id: string): Note | null {
 	const row = getDb().prepare('SELECT * FROM notes WHERE id = ? AND user_id = ?').get(id, userId);
-	return row ? toNote(row as unknown as NoteRow) : null;
+	return row ? toNote(row as unknown as NoteRow, tagsOf(id)) : null;
 }
 
 function text(value: unknown, field: string, max: number): string {
@@ -89,20 +141,44 @@ function bool(value: unknown, field: string): boolean {
 	return value;
 }
 
+function notebookRef(userId: string, value: unknown): string | null {
+	if (value === null) return null;
+	if (typeof value !== 'string' || !notebookExists(userId, value)) {
+		error(400, '"notebookId" must be one of your notebooks, or null.');
+	}
+	return value;
+}
+
 export function createNote(userId: string, body: Record<string, unknown>): Note {
 	const title = body.title === undefined ? '' : text(body.title, 'title', MAX_TITLE);
 	const content = body.content === undefined ? '' : text(body.content, 'content', MAX_CONTENT);
+	const notebookId = body.notebookId === undefined ? null : notebookRef(userId, body.notebookId);
 	const now = Date.now();
-	const note: Note = { id: randomUUID(), title, content, pinned: false, trashed: false, createdAt: now, updatedAt: now };
-	getDb()
-		.prepare('INSERT INTO notes (id, user_id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-		.run(note.id, userId, title, content, now, now);
+	const note: Note = {
+		id: randomUUID(),
+		title,
+		content,
+		pinned: false,
+		trashed: false,
+		notebookId,
+		tags: extractTags(content),
+		createdAt: now,
+		updatedAt: now
+	};
+	transaction(() => {
+		getDb()
+			.prepare(
+				'INSERT INTO notes (id, user_id, title, content, notebook_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+			)
+			.run(note.id, userId, title, content, notebookId, now, now);
+		indexTags(note.id, content);
+	});
 	return note;
 }
 
 export function updateNote(userId: string, id: string, body: Record<string, unknown>): Note | null {
 	const sets: string[] = [];
-	const params: (string | number)[] = [];
+	const params: (string | number | null)[] = [];
 
 	if ('title' in body) {
 		sets.push('title = ?');
@@ -112,10 +188,14 @@ export function updateNote(userId: string, id: string, body: Record<string, unkn
 		sets.push('content = ?');
 		params.push(text(body.content, 'content', MAX_CONTENT));
 	}
-	// Only real edits move a note's "last edited" time; pinning and trashing don't.
+	// Only real edits move a note's "last edited" time; filing, pinning and trashing don't.
 	if (sets.length) {
 		sets.push('updated_at = ?');
 		params.push(Date.now());
+	}
+	if ('notebookId' in body) {
+		sets.push('notebook_id = ?');
+		params.push(notebookRef(userId, body.notebookId));
 	}
 	if ('pinned' in body) {
 		sets.push('pinned = ?');
@@ -129,12 +209,16 @@ export function updateNote(userId: string, id: string, body: Record<string, unkn
 			sets.push('trashed_at = NULL');
 		}
 	}
-	if (!sets.length) error(400, 'Send at least one of: title, content, pinned, trashed.');
+	if (!sets.length) error(400, 'Send at least one of: title, content, notebookId, pinned, trashed.');
 
-	const row = getDb()
-		.prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND user_id = ? RETURNING *`)
-		.get(...params, id, userId);
-	return row ? toNote(row as unknown as NoteRow) : null;
+	return transaction(() => {
+		const row = getDb()
+			.prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND user_id = ? RETURNING *`)
+			.get(...params, id, userId) as unknown as NoteRow | undefined;
+		if (!row) return null;
+		if ('content' in body) indexTags(id, row.content);
+		return toNote(row, tagsOf(id));
+	});
 }
 
 export function deleteNote(userId: string, id: string): boolean {

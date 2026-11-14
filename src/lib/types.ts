@@ -14,6 +14,7 @@ export interface NoteSummary {
 	snippet: string;
 	pinned: boolean;
 	trashed: boolean;
+	notebookId: string | null;
 	updatedAt: number;
 }
 
@@ -23,6 +24,9 @@ export interface Note {
 	content: string;
 	pinned: boolean;
 	trashed: boolean;
+	notebookId: string | null;
+	/** Derived from #tags in the content; read-only. */
+	tags: string[];
 	createdAt: number;
 	updatedAt: number;
 }
@@ -32,4 +36,19 @@ export interface NotePatch {
 	content?: string;
 	pinned?: boolean;
 	trashed?: boolean;
+	notebookId?: string | null;
+}
+
+export interface Notebook {
+	id: string;
+	name: string;
+	/** Notes in the notebook, not counting the trash. */
+	noteCount: number;
+	createdAt: number;
+}
+
+export interface TagCount {
+	name: string;
+	/** Notes with this exact tag, not counting the trash. */
+	noteCount: number;
 }
