@@ -1,4 +1,4 @@
-import { error, type RequestEvent } from '@sveltejs/kit';
+import { error, json, type RequestEvent } from '@sveltejs/kit';
 import type { User } from '#lib/types.ts';
 
 export function requireUser(event: RequestEvent): User {
@@ -17,4 +17,13 @@ export async function readJson(request: Request): Promise<Record<string, unknown
 		error(400, 'Send a JSON object in the request body.');
 	}
 	return body as Record<string, unknown>;
+}
+
+/** A 429 response telling the client when it may try again. */
+export function tooManyAttempts(retryAfterMs: number, what: string): Response {
+	const minutes = Math.max(1, Math.ceil(retryAfterMs / 60_000));
+	return json(
+		{ status: 429, message: `Too many ${what}. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.` },
+		{ status: 429, headers: { 'retry-after': String(Math.ceil(retryAfterMs / 1000)) } }
+	);
 }

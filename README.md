@@ -6,7 +6,8 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 - Full-text search with prefix matching
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
 - Pin notes, move them to the trash, restore them, or delete them for good
-- Download any note as a `.md` file
+- Download any note as a `.md` file, or export everything as a zip (one folder per notebook)
+- Sign-in and sign-up rate limiting
 - Multiple accounts per server, each with private notes
 - Light and dark themes, phone and desktop layouts
 - No external requests: fonts and scripts are served by the app itself
@@ -48,7 +49,18 @@ DATA_DIR=./data ORIGIN=http://localhost:3000 node build
 
 Behind a proxy that terminates TLS, you can use `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host` instead of `ORIGIN`. See the [adapter-node docs](https://svelte.dev/docs/kit/adapter-node) for all server options.
 
+### Behind a reverse proxy
+
+Set `ADDRESS_HEADER=x-forwarded-for` (and `XFF_DEPTH=1` for a single proxy) so the app sees each visitor's real IP address. Without it, every request appears to come from the proxy, and visitors share one sign-in rate limit.
+
+### Rate limits
+
+To slow down password guessing, sign-in is blocked for 15 minutes after 10 failed attempts for one username or 20 from one IP address, and an IP address can create at most 5 accounts an hour. Counters are kept in memory and reset when the server restarts.
+
 ## Backups
+
+To take your notes elsewhere, use **Export all notes** at the bottom of the sidebar (or `GET /api/export`). You get a zip with one folder per notebook and one Markdown file per note, each starting with a small YAML header (title, created and updated dates) that Obsidian, Joplin and most Markdown tools understand. Notes in the trash aren't included.
+
 
 Everything lives in `DATA_DIR/inkwell.db`. To back it up while the app is running, use SQLite's online backup:
 
@@ -97,11 +109,12 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `PATCH`  | `/api/notebooks/:id`  | `{ name }`                                    |
 | `DELETE` | `/api/notebooks/:id`  | its notes are kept, without a notebook        |
 | `GET`    | `/api/tags`           | tags in use, with note counts                 |
+| `GET`    | `/api/export`         | zip of all notes outside the trash            |
 | `GET`    | `/api/health`         |                                               |
 
 Tags are read from `#words` in note content on every save (ignoring code), so there's no tag endpoint to write to. Filtering by `tag=project` also matches nested tags like `project/inkwell`.
 
-Errors look like `{ "status": 404, "message": "…" }`.
+Errors look like `{ "status": 404, "message": "…" }`. Rate-limited requests get status `429` with a `Retry-After` header in seconds.
 
 ### Database changes
 

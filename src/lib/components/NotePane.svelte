@@ -5,6 +5,7 @@
 	import Preview from './Preview.svelte';
 	import { longDate } from '#lib/format.ts';
 	import { extractTags } from '#lib/tags.ts';
+	import { noteToMarkdown, safeFileName } from '#lib/note-file.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
 	interface Props {
@@ -85,11 +86,9 @@
 
 	function download() {
 		if (!note) return;
-		const title = note.title.trim();
-		const body = title ? `# ${title}\n\n${note.content}` : note.content;
-		const name = (title || 'Untitled').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').slice(0, 100);
-		const url = URL.createObjectURL(new Blob([body], { type: 'text/markdown;charset=utf-8' }));
-		const a = Object.assign(document.createElement('a'), { href: url, download: `${name}.md` });
+		const file = new Blob([noteToMarkdown(note)], { type: 'text/markdown;charset=utf-8' });
+		const url = URL.createObjectURL(file);
+		const a = Object.assign(document.createElement('a'), { href: url, download: `${safeFileName(note.title)}.md` });
 		a.click();
 		setTimeout(() => URL.revokeObjectURL(url), 1000);
 	}

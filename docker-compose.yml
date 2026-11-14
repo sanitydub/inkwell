@@ -10,6 +10,9 @@ services:
       ORIGIN: http://localhost:3000
       # Set to "false" once everyone who needs an account has one.
       ALLOW_REGISTRATION: "true"
+      # Behind a reverse proxy (Caddy, Traefik, nginx), uncomment so sign-in limits apply per visitor:
+      # ADDRESS_HEADER: x-forwarded-for
+      # XFF_DEPTH: "1"
     restart: unless-stopped
 
 volumes:

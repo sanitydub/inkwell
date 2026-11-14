@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { FileText, Hash, LogOut, Monitor, Moon, Notebook as NotebookIcon, Pin, Plus, Sun, Trash2 } from '@lucide/svelte';
+	import { FileArchive, FileText, Hash, LogOut, Monitor, Moon, Notebook as NotebookIcon, Pin, Plus, Sun, Trash2 } from '@lucide/svelte';
 	import type { User, View } from '#lib/types.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
@@ -58,6 +58,12 @@
 		} else {
 			nameInput?.focus();
 		}
+	}
+
+	// The server sends the zip as an attachment, so the page stays put while it downloads.
+	async function exportAll() {
+		await ws.flush();
+		location.href = '/api/export';
 	}
 
 	// ---- Theme ----------------------------------------------------------------
@@ -196,6 +202,9 @@
 			{:else}
 				<Monitor size={16} />
 			{/if}
+		</button>
+		<button class="icon-btn" onclick={exportAll} aria-label="Export all notes" title="Export all notes as a zip">
+			<FileArchive size={16} />
 		</button>
 		<button class="icon-btn" onclick={onsignout} aria-label="Sign out" title="Sign out">
 			<LogOut size={16} />
