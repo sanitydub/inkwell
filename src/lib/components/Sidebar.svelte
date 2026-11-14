@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { FileArchive, FileText, Hash, LogOut, Monitor, Moon, Notebook as NotebookIcon, Pin, Plus, Sun, Trash2 } from '@lucide/svelte';
+	import { FileArchive, FileText, FileUp, Hash, LogOut, Monitor, Moon, Notebook as NotebookIcon, Pin, Plus, Sun, Trash2 } from '@lucide/svelte';
 	import type { User, View } from '#lib/types.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
@@ -59,6 +59,8 @@
 			nameInput?.focus();
 		}
 	}
+
+	let fileInput = $state<HTMLInputElement>();
 
 	// The server sends the zip as an attachment, so the page stays put while it downloads.
 	async function exportAll() {
@@ -203,6 +205,26 @@
 				<Monitor size={16} />
 			{/if}
 		</button>
+		<button
+			class="icon-btn"
+			onclick={() => fileInput?.click()}
+			disabled={ws.importing}
+			aria-label="Import notes"
+			title="Import Markdown files or a zip"
+		>
+			<FileUp size={16} />
+		</button>
+		<input
+			bind:this={fileInput}
+			type="file"
+			multiple
+			hidden
+			accept=".md,.markdown,.txt,.zip,text/markdown,text/plain,application/zip"
+			onchange={(e) => {
+				ws.importFiles([...(e.currentTarget.files ?? [])]);
+				e.currentTarget.value = '';
+			}}
+		/>
 		<button class="icon-btn" onclick={exportAll} aria-label="Export all notes" title="Export all notes as a zip">
 			<FileArchive size={16} />
 		</button>

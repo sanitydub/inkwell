@@ -1,4 +1,4 @@
-import { api, ApiError } from './api';
+import { api, ApiError, type ImportResult } from './api';
 import { snippetFrom } from './snippet';
 import { normalizeTitle } from './links';
 import type { Backlink, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, View } from './types';
@@ -324,6 +324,26 @@ export class Workspace {
 		}
 	}
 
+	// ---- Import -------------------------------------------------------------
+
+	importing = $state(false);
+
+	async importFiles(files: File[]) {
+		if (!files.length || this.importing) return;
+		await this.flush();
+		this.importing = true;
+		this.message = `Importing ${files.length === 1 ? files[0].name : `${files.length} files`}…`;
+		try {
+			const result = await api.importFiles(files);
+			await Promise.all([this.refresh(), this.refreshSidebar(), this.refreshTitles()]);
+			this.message = describeImport(result);
+		} catch (err) {
+			this.#fail(err);
+		} finally {
+			this.importing = false;
+		}
+	}
+
 	// ---- Notebooks ----------------------------------------------------------
 
 	/** Creates a notebook and shows it. Returns false (with a message shown) if it failed. */
@@ -369,4 +389,19 @@ export class Workspace {
 		}
 		this.message = err instanceof Error ? err.message : String(err);
 	}
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+function describeImport({ imported, notebooksCreated, skipped }: ImportResult): string {
+	if (!imported) {
+		return skipped.length
+			? `Nothing imported. None of the ${plural(skipped.length, 'file')} were Markdown (.md or .txt).`
+			: 'Nothing imported. No Markdown (.md or .txt) files were found.';
+	}
+	let text = `Imported ${plural(imported, 'note')}`;
+	if (notebooksCreated.length) text += ` into ${plural(notebooksCreated.length, 'new notebook')}`;
+	text += '.';
+	if (skipped.length) text += ` Skipped ${plural(skipped.length, 'file')} that ${skipped.length === 1 ? 'isn’t' : 'aren’t'} Markdown.`;
+	return text;
 }

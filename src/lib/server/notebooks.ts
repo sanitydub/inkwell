@@ -76,3 +76,13 @@ export function deleteNotebook(userId: string, id: string): boolean {
 	const res = getDb().prepare('DELETE FROM notebooks WHERE id = ? AND user_id = ?').run(id, userId);
 	return Number(res.changes) > 0;
 }
+
+/** The notebook with this name (ignoring case), created if needed. Used by imports. */
+export function findOrCreateNotebook(userId: string, rawName: string): { id: string; created: boolean } {
+	const name = rawName.trim().replace(/\s+/g, ' ');
+	const existing = getDb().prepare('SELECT id FROM notebooks WHERE user_id = ? AND name = ?').get(userId, name) as
+		| { id: string }
+		| undefined;
+	if (existing) return { id: existing.id, created: false };
+	return { id: createNotebook(userId, { name }).id, created: true };
+}

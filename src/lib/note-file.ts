@@ -20,7 +20,8 @@ export function noteToMarkdown(note: NoteForFile): string {
 		'---',
 		''
 	];
-	return header.join('\n') + note.content + (note.content.endsWith('\n') ? '' : '\n');
+	// Always exactly one extra newline, which the import removes again, so round trips are exact.
+	return header.join('\n') + note.content + '\n';
 }
 
 /** A file or folder name that works on Windows, macOS and Linux. */

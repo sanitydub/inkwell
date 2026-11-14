@@ -7,8 +7,8 @@ import { extractTags } from '#lib/tags.ts';
 import { extractLinks, linkRegExp, linkTarget, linksAsText, normalizeTitle } from '#lib/links.ts';
 import type { Backlink, Note, NoteSummary, NoteTitle, TagCount, View } from '#lib/types.ts';
 
-const MAX_TITLE = 500;
-const MAX_CONTENT = 5_000_000;
+export const MAX_TITLE = 500;
+export const MAX_CONTENT = 5_000_000;
 
 interface NoteRow {
 	id: string;
@@ -213,6 +213,22 @@ export function createNote(userId: string, body: Record<string, unknown>): Note 
 		indexContent(note.id, content);
 	});
 	return note;
+}
+
+/** Inserts a note from an import, keeping its own dates. Call inside a transaction. */
+export function insertImportedNote(
+	userId: string,
+	note: { title: string; content: string; notebookId: string | null; pinned: boolean; createdAt: number; updatedAt: number }
+) {
+	const id = randomUUID();
+	getDb()
+		.prepare(
+			`INSERT INTO notes (id, user_id, title, content, notebook_id, pinned, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		)
+		.run(id, userId, note.title, note.content, note.notebookId, note.pinned ? 1 : 0, note.createdAt, note.updatedAt);
+	indexContent(id, note.content);
+	return id;
 }
 
 export function updateNote(userId: string, id: string, body: Record<string, unknown>): Note | null {

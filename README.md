@@ -8,6 +8,7 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 - `[[Wiki-links]]` between notes with title suggestions as you type, plus a “Linked from” list of backlinks on every note
 - Pin notes, move them to the trash, restore them, or delete them for good
 - Download any note as a `.md` file, or export everything as a zip (one folder per notebook)
+- Import Markdown files or a zip, such as an Obsidian vault, a Joplin Markdown export, or an Inkwell export
 - Sign-in and sign-up rate limiting
 - Multiple accounts per server, each with private notes
 - Light and dark themes, phone and desktop layouts
@@ -57,6 +58,18 @@ Set `ADDRESS_HEADER=x-forwarded-for` (and `XFF_DEPTH=1` for a single proxy) so t
 ### Rate limits
 
 To slow down password guessing, sign-in is blocked for 15 minutes after 10 failed attempts for one username or 20 from one IP address, and an IP address can create at most 5 accounts an hour. Counters are kept in memory and reset when the server restarts.
+
+## Importing notes
+
+Use **Import** at the bottom of the sidebar to bring in `.md` or `.txt` files, or `.zip` archives of them:
+
+- Each file becomes a note. Its title comes from the YAML front matter (`title:`) if there is one, otherwise from the file name. `created`, `updated` and `pinned` in the front matter are kept too.
+- Folders become notebooks. Nested folders get a combined name like “Projects / Atlas”, and a single folder wrapping the whole zip is ignored. Files go into an existing notebook if one has the same name.
+- Front matter with anything beyond those keys (Obsidian `aliases`, `tags:` lists, …) stays in the note so nothing is lost.
+- Images, attachments and app folders like `.obsidian/` are skipped.
+- Importing the same files twice creates duplicates.
+
+Inkwell's own export imports back exactly. Uploads are limited by `BODY_SIZE_LIMIT` (the Docker image allows 10 MB); raise it, or import in smaller batches, for big archives.
 
 ## Backups
 
@@ -111,6 +124,7 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `DELETE` | `/api/notebooks/:id`  | its notes are kept, without a notebook        |
 | `GET`    | `/api/tags`           | tags in use, with note counts                 |
 | `GET`    | `/api/export`         | zip of all notes outside the trash            |
+| `POST`   | `/api/import`         | multipart form data, one or more `files` (.md, .txt, .zip) |
 | `GET`    | `/api/titles`         | every note title (for resolving links)        |
 | `GET`    | `/api/notes/:id/backlinks` | notes that `[[link]]` here, with the linking line |
 | `GET`    | `/api/health`         |                                               |

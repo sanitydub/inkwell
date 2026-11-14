@@ -19,16 +19,16 @@ export class ApiError extends Error {
 const OFFLINE = 'Can’t reach the server. Check your connection and try again.';
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+	return send<T>(method, path, {
+		headers: body === undefined ? {} : { 'content-type': 'application/json' },
+		body: body === undefined ? undefined : JSON.stringify(body)
+	});
+}
+
+async function send<T>(method: string, path: string, init: { headers?: Record<string, string>; body?: BodyInit }): Promise<T> {
 	let res: Response;
 	try {
-		res = await fetch(`/api${path}`, {
-			method,
-			headers: {
-				accept: 'application/json',
-				...(body === undefined ? {} : { 'content-type': 'application/json' })
-			},
-			body: body === undefined ? undefined : JSON.stringify(body)
-		});
+		res = await fetch(`/api${path}`, { method, headers: { accept: 'application/json', ...init.headers }, body: init.body });
 	} catch {
 		throw new ApiError(0, OFFLINE);
 	}
@@ -43,6 +43,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 		throw new ApiError(res.status, message);
 	}
 	return (res.status === 204 ? undefined : await res.json()) as T;
+}
+
+export interface ImportResult {
+	imported: number;
+	notebooksCreated: string[];
+	skipped: string[];
 }
 
 const notePath = (id: string) => `/notes/${encodeURIComponent(id)}`;
@@ -76,6 +82,20 @@ export const api = {
 	listTags: () => request<{ tags: TagCount[] }>('GET', '/tags'),
 	listTitles: () => request<{ notes: NoteTitle[] }>('GET', '/titles'),
 	listBacklinks: (id: string) => request<{ backlinks: Backlink[] }>('GET', `${notePath(id)}/backlinks`),
+
+	/** Uploads .md/.txt files and .zip archives; folders become notebooks. */
+	async importFiles(files: File[]): Promise<ImportResult> {
+		const form = new FormData();
+		for (const file of files) form.append('files', file, file.name);
+		try {
+			return await send<ImportResult>('POST', '/import', { body: form });
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 413) {
+				throw new ApiError(413, 'That’s more than this server accepts in one upload. Import fewer files at a time, or raise BODY_SIZE_LIMIT.');
+			}
+			throw err;
+		}
+	},
 
 	/** Best-effort save while the page is closing; the browser finishes the request for us. */
 	saveOnExit(id: string, patch: NotePatch) {
