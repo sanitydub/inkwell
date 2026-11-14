@@ -2,6 +2,12 @@
 
 A simple note-taking app you host yourself. Write in Markdown with a live preview, find anything with full-text search, and keep everything in a single SQLite file on your own server.
 
+![Inkwell on desktop: the note list, notebooks and tags in the sidebar, and a note open in Split view with Markdown on the left and the rendered note on the right](docs/screenshots/desktop-light.png)
+
+| Dark theme, with a note’s backlinks open | On a phone |
+| --- | --- |
+| <img src="docs/screenshots/desktop-dark.png" alt="Inkwell in dark mode, showing a note in Read view with its Linked from list open"> | <img src="docs/screenshots/mobile-list.png" alt="The note list on a phone" width="150"> <img src="docs/screenshots/mobile-note.png" alt="A note open on a phone, in dark mode" width="150"> |
+
 - Markdown editor (CodeMirror) with Write, Split and Read layouts
 - Full-text search with prefix matching
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
@@ -86,9 +92,12 @@ sqlite3 data/inkwell.db ".backup 'inkwell-backup.db'"
 
 ```bash
 npm install
-npm run dev     # http://localhost:5173
-npm run check   # type-check
+npm run dev          # http://localhost:5173
+npm run check        # type-check
+npm run screenshots  # regenerate docs/screenshots
 ```
+
+`npm run screenshots` builds the app, runs it with a throwaway database of demo notes, and captures the README images with a Chromium-based browser (Brave, Chrome, Chromium or Edge; set `BROWSER_PATH` to choose one). Run it after visible UI changes and commit the updated images.
 
 Stack: [SvelteKit](https://svelte.dev/docs/kit) 3 (Svelte 5), Node's built-in `node:sqlite` with FTS5, CodeMirror 6, marked + DOMPurify.
 

@@ -4,7 +4,7 @@ import { getDb, transaction } from './db';
 import { notebookExists } from './notebooks';
 import { snippetFrom } from '#lib/snippet.ts';
 import { extractTags } from '#lib/tags.ts';
-import { extractLinks, linkRegExp, linkTarget, linksAsText, normalizeTitle } from '#lib/links.ts';
+import { extractLinks, linkRegExp, linkTarget, normalizeTitle } from '#lib/links.ts';
 import type { Backlink, Note, NoteSummary, NoteTitle, TagCount, View } from '#lib/types.ts';
 
 export const MAX_TITLE = 500;
@@ -145,8 +145,8 @@ export function listBacklinks(userId: string, id: string): Backlink[] | null {
 		const line = r.content
 			.split('\n')
 			.find((l) => [...l.matchAll(linkRegExp())].some((m) => normalizeTitle(linkTarget(m[1])) === target));
-		const context = linksAsText(line ?? '').trim().replace(/\s+/g, ' ');
-		return { id: r.id, title: r.title, context: context.length > 160 ? context.slice(0, 160).trimEnd() + '…' : context };
+		// Same plain-text cleanup as list snippets: no Markdown syntax, links shown as their text.
+		return { id: r.id, title: r.title, context: snippetFrom(line ?? '', 160) };
 	});
 }
 
