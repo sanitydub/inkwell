@@ -1,0 +1,16 @@
+services:
+  inkwell:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - inkwell-data:/data
+    environment:
+      # The address people type into their browser. Required for production.
+      ORIGIN: http://localhost:3000
+      # Set to "false" once everyone who needs an account has one.
+      ALLOW_REGISTRATION: "true"
+    restart: unless-stopped
+
+volumes:
+  inkwell-data:

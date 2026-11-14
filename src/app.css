@@ -1,0 +1,206 @@
+/*
+ * Inkwell — cool paper, blue-black ink.
+ * The writing surface carries the personality (serif titles and reading view);
+ * everything around it stays quiet.
+ */
+
+:root {
+	--paper: #f3f5f2;
+	--panel: #e8ece6;
+	--panel-strong: #dde3da;
+	--line: #d3dad0;
+	--ink: #1d2420;
+	--muted: #59645e;
+	--faint: #949e98;
+	--accent: #363c8c;
+	--accent-ink: #f3f5f2;
+	--accent-soft: rgb(54 60 140 / 0.09);
+	--selection: rgb(54 60 140 / 0.18);
+	--danger: #9d3027;
+	--danger-soft: rgb(157 48 39 / 0.08);
+	--code-bg: #e5eae3;
+	--mark: #ece08f;
+
+	--syn-keyword: #6b3a8c;
+	--syn-string: #2f6b45;
+	--syn-number: #9a5a14;
+	--syn-fn: #1f5a8a;
+	--syn-type: #8a3a5a;
+
+	--font-ui: 'Instrument Sans Variable', ui-sans-serif, system-ui, sans-serif;
+	--font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+	--radius: 6px;
+	--doc-width: 46rem;
+	--gutter: max(1.5rem, calc((100% - var(--doc-width)) / 2));
+
+	color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme='light']) {
+		--paper: #151917;
+		--panel: #1c211f;
+		--panel-strong: #262c29;
+		--line: #2c3330;
+		--ink: #dce3de;
+		--muted: #9aa59f;
+		--faint: #65706a;
+		--accent: #a9aef5;
+		--accent-ink: #151917;
+		--accent-soft: rgb(169 174 245 / 0.1);
+		--selection: rgb(169 174 245 / 0.22);
+		--danger: #f08f84;
+		--danger-soft: rgb(240 143 132 / 0.1);
+		--code-bg: #202624;
+		--mark: #5c5520;
+		--syn-keyword: #cfa3ef;
+		--syn-string: #93cfa4;
+		--syn-number: #e7b471;
+		--syn-fn: #8cc2f0;
+		--syn-type: #ef9fbe;
+		color-scheme: dark;
+	}
+}
+
+:root[data-theme='dark'] {
+	--paper: #151917;
+	--panel: #1c211f;
+	--panel-strong: #262c29;
+	--line: #2c3330;
+	--ink: #dce3de;
+	--muted: #9aa59f;
+	--faint: #65706a;
+	--accent: #a9aef5;
+	--accent-ink: #151917;
+	--accent-soft: rgb(169 174 245 / 0.1);
+	--selection: rgb(169 174 245 / 0.22);
+	--danger: #f08f84;
+	--danger-soft: rgb(240 143 132 / 0.1);
+	--code-bg: #202624;
+	--mark: #5c5520;
+	--syn-keyword: #cfa3ef;
+	--syn-string: #93cfa4;
+	--syn-number: #e7b471;
+	--syn-fn: #8cc2f0;
+	--syn-type: #ef9fbe;
+	color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	height: 100%;
+}
+
+body {
+	background: var(--paper);
+	color: var(--ink);
+	font-family: var(--font-ui);
+	font-size: 15px;
+	line-height: 1.45;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+::selection {
+	background: var(--selection);
+}
+
+button,
+input,
+textarea,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+button {
+	cursor: pointer;
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* Shared controls */
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	height: 2rem;
+	padding: 0 0.75rem;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: transparent;
+	font-size: 0.875rem;
+	font-weight: 500;
+	white-space: nowrap;
+}
+.btn:hover {
+	background: var(--panel);
+}
+.btn.primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--accent-ink);
+}
+.btn.primary:hover {
+	filter: brightness(1.08);
+}
+.btn.danger {
+	color: var(--danger);
+	border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.btn.danger:hover {
+	background: var(--danger-soft);
+}
+.btn:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+
+.icon-btn {
+	display: inline-grid;
+	place-items: center;
+	width: 2rem;
+	height: 2rem;
+	border: 0;
+	border-radius: var(--radius);
+	background: transparent;
+	color: var(--muted);
+}
+.icon-btn:hover {
+	background: var(--panel);
+	color: var(--ink);
+}
+.icon-btn[aria-pressed='true'] {
+	color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition-duration: 0.01ms !important;
+		animation-duration: 0.01ms !important;
+	}
+}
