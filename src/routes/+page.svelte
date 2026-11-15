@@ -13,6 +13,8 @@
 	let { data } = $props();
 
 	const ws = new Workspace();
+	// svelte-ignore state_referenced_locally (the saved order is only needed once, at start)
+	ws.sort = data.preferences.noteSort;
 	let drawerOpen = $state(false);
 	let searchInput = $state<HTMLInputElement>();
 	/** Which palette is open: the note switcher (Ctrl/Cmd+P) or commands (Ctrl/Cmd+Shift+P). */

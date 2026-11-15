@@ -146,7 +146,9 @@ const migrations: (string | ((db: DatabaseSync) => void))[] = [
 		expires_at   INTEGER
 	);
 	CREATE INDEX api_tokens_user ON api_tokens(user_id);
-	`
+	`,
+	// 8: each person's note list order, e.g. "title-asc". Null means the default (last edited, newest first).
+	`ALTER TABLE users ADD COLUMN note_sort TEXT;`
 ];
 
 let db: DatabaseSync | undefined;

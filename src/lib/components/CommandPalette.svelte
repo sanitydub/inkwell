@@ -6,6 +6,7 @@
 	import { fuzzyFilter } from '#lib/fuzzy.ts';
 	import { normalizeTitle } from '#lib/links.ts';
 	import { preferences, type Theme } from '#lib/preferences.svelte.ts';
+	import type { NoteSort } from '#lib/types.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
 	// Ctrl/Cmd+P finds a note by title. Typing ">" first (or opening with Ctrl/Cmd+Shift+P) lists
@@ -83,10 +84,29 @@
 			...themes
 				.filter(([t]) => t !== preferences.theme)
 				.map(([t, label]) => ({ label, run: () => preferences.setTheme(t) })),
+			...sortCommands(),
 			{ label: 'Import notes…', run: () => ws.chooseImportFiles() },
 			{ label: 'Export all notes', run: () => ws.exportAll() },
 			{ label: 'Open Settings', run: async () => (await ws.flush(), goto('/settings')) },
 			{ label: 'Sign out', run: onsignout }
+		];
+	}
+
+	function sortCommands(): Command[] {
+		if (ws.view === 'trash') return [];
+		const fields: [NoteSort['by'], string, NoteSort['order']][] = [
+			['updated', 'last edited', 'desc'],
+			['created', 'created', 'desc'],
+			['title', 'title', 'asc']
+		];
+		return [
+			...fields
+				.filter(([by]) => by !== ws.sort.by)
+				.map(([by, label, order]) => ({ label: `Sort by ${label}`, run: () => ws.setSort({ by, order }) })),
+			{
+				label: ws.sort.by === 'title' ? (ws.sort.order === 'asc' ? 'Sort Z to A' : 'Sort A to Z') : ws.sort.order === 'desc' ? 'Sort oldest first' : 'Sort newest first',
+				run: () => ws.setSort({ by: ws.sort.by, order: ws.sort.order === 'asc' ? 'desc' : 'asc' })
+			}
 		];
 	}
 

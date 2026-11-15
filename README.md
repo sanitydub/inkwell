@@ -17,6 +17,7 @@ A simple note-taking app you host yourself. Write in a live view that formats as
 - `[[Wiki-links]]` between notes with title suggestions as you type, a “Linked from” list of backlinks on every note, and an offer to update links when you rename a note
 - Version history: earlier versions of each note are kept as you edit; compare any of them with the note now and restore it (restoring can itself be undone)
 - Pin notes, move them to the trash, restore them, or delete them for good
+- Sort notes by last edited, created or title, either way round; the choice is saved to your account, so every device uses it
 - Download any note as a `.md` file, or export everything as a zip (one folder per notebook)
 - Import Markdown and Word (.docx) files, or a zip of them, such as an Obsidian vault, a Joplin Markdown export, or an Inkwell export
 - Sign-in and sign-up rate limiting
@@ -200,6 +201,8 @@ A token can do everything you can through the API except the routes under `/api/
 | `POST`   | `/api/me/password`    | `{ currentPassword, newPassword }`; signs out your other devices |
 | `GET`    | `/api/me/sessions`    | how many other devices are signed in          |
 | `DELETE` | `/api/me/sessions`    | signs out your other devices                  |
+| `GET`    | `/api/me/preferences` | `{ noteSort: { by, order } }`                 |
+| `PATCH`  | `/api/me/preferences` | `{ noteSort: { by: "updated" \| "created" \| "title", order: "asc" \| "desc" } }`; the list order on every device |
 | `GET`    | `/api/me/tokens`      | your API tokens (never their secrets)         |
 | `POST`   | `/api/me/tokens`      | `{ name, scope: "read" \| "write", expiresInDays: 30 \| 90 \| 365 \| null }`; returns `{ token, secret }`, the only time the secret is shown |
 | `DELETE` | `/api/me/tokens/:id`  | revokes a token                               |
@@ -207,7 +210,7 @@ A token can do everything you can through the API except the routes under `/api/
 | `POST`   | `/api/admin/users`    | admins only: `{ username, password, isAdmin? }` |
 | `PATCH`  | `/api/admin/users/:id`| admins only: `{ password?, isAdmin? }`        |
 | `DELETE` | `/api/admin/users/:id`| admins only: deletes the account and its notes |
-| `GET`    | `/api/notes`          | `?view=all\|pinned\|trash&q=…&notebook=<id>&tag=<name>` |
+| `GET`    | `/api/notes`          | `?view=all\|pinned\|trash&q=…&notebook=<id>&tag=<name>&sort=updated\|created\|title&order=asc\|desc`; without `sort`, your saved order. Pinned notes stay first in `all`; searches are ordered by best match and the trash by when notes were trashed |
 | `POST`   | `/api/notes`          | `{ title?, content?, notebookId? }`           |
 | `GET`    | `/api/notes/:id`      |                                               |
 | `PATCH`  | `/api/notes/:id`      | any of `{ title, content, notebookId, pinned, trashed }` |

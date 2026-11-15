@@ -2,7 +2,7 @@ import { api, ApiError, type ImportResult } from './api';
 import { snippetFrom } from './snippet';
 import { noteToMarkdown, safeFileName } from './note-file';
 import { isLinkableTitle, normalizeTitle } from './links';
-import type { Backlink, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, View } from './types';
+import { DEFAULT_SORT, type Backlink, type Note, type Notebook, type NotePatch, type NoteSort, type NoteSummary, type NoteTitle, type TagCount, type View } from './types';
 
 export type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
@@ -19,6 +19,8 @@ export class Workspace {
 	notebookId = $state<string | null>(null);
 	tag = $state<string | null>(null);
 	query = $state('');
+	/** The list order, saved to the account so every device uses it. */
+	sort = $state<NoteSort>(DEFAULT_SORT);
 
 	notes = $state<NoteSummary[]>([]);
 	loading = $state(true);
@@ -89,7 +91,8 @@ export class Workspace {
 				view: this.view,
 				q: this.query.trim(),
 				notebook: this.notebookId,
-				tag: this.tag
+				tag: this.tag,
+				sort: this.sort
 			});
 			if (seq === this.#listSeq) this.notes = notes;
 		} catch (err) {
@@ -377,6 +380,21 @@ export class Workspace {
 		} catch (err) {
 			this.#fail(err);
 			return false;
+		}
+	}
+
+	/** Changes the list order and saves it to the account. */
+	async setSort(sort: NoteSort) {
+		if (sort.by === this.sort.by && sort.order === this.sort.order) return;
+		const before = this.sort;
+		this.sort = sort;
+		this.refresh();
+		try {
+			await api.setNoteSort(sort);
+		} catch (err) {
+			this.sort = before;
+			this.refresh();
+			this.#fail(err);
 		}
 	}
 

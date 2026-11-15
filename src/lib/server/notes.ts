@@ -6,7 +6,7 @@ import { getVersion, prepareRestore, snapshotBeforeSave } from './versions';
 import { snippetFrom } from '#lib/snippet.ts';
 import { extractTags } from '#lib/tags.ts';
 import { extractLinks, isLinkableTitle, linkRegExp, linkTarget, normalizeTitle, retargetLinks } from '#lib/links.ts';
-import type { Backlink, Note, NoteSummary, NoteTitle, TagCount, View } from '#lib/types.ts';
+import { DEFAULT_SORT, type Backlink, type Note, type NoteSort, type NoteSummary, type NoteTitle, type TagCount, type View } from '#lib/types.ts';
 
 export const MAX_TITLE = 500;
 export const MAX_CONTENT = 5_000_000;
@@ -41,6 +41,7 @@ const toSummary = (r: NoteRow): NoteSummary => ({
 	pinned: r.pinned === 1,
 	trashed: r.trashed_at !== null,
 	notebookId: r.notebook_id,
+	createdAt: r.created_at,
 	updatedAt: r.updated_at
 });
 
@@ -49,6 +50,15 @@ const VIEWS: Record<View, { where: string; order: string }> = {
 	pinned: { where: 'n.trashed_at IS NULL AND n.pinned = 1', order: 'n.updated_at DESC' },
 	trash: { where: 'n.trashed_at IS NOT NULL', order: 'n.trashed_at DESC' }
 };
+
+/** ORDER BY for a list that isn't a search. Title order is applied afterwards, in listNotes. */
+function listOrder(filter: NoteFilter): string {
+	if (filter.view === 'trash') return VIEWS.trash.order;
+	const sort = filter.sort ?? DEFAULT_SORT;
+	const column = sort.by === 'created' ? 'n.created_at' : 'n.updated_at';
+	const dir = sort.by === 'title' ? 'DESC' : sort.order.toUpperCase();
+	return `${filter.view === 'all' ? 'n.pinned DESC, ' : ''}${column} ${dir}, n.id`;
+}
 
 export const isView = (v: unknown): v is View => typeof v === 'string' && v in VIEWS;
 
@@ -69,6 +79,22 @@ export interface NoteFilter {
 	notebookId?: string | null;
 	/** Matches the tag and anything nested under it: "project" also finds "project/inkwell". */
 	tag?: string | null;
+	/** Ignored while searching (results are ordered by relevance) and in the trash (newest trashed first). */
+	sort?: NoteSort;
+}
+
+// Natural order: "Note 2" before "Note 10", ignoring case and accents.
+const titleOrder = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+/** Sorts by title in place. Untitled notes go last; ties go to the most recently edited. */
+function sortByTitle(rows: NoteRow[], order: NoteSort['order']) {
+	const dir = order === 'asc' ? 1 : -1;
+	rows.sort((a, b) => {
+		const ta = a.title.trim();
+		const tb = b.title.trim();
+		if (!ta !== !tb) return ta ? -1 : 1;
+		return dir * titleOrder.compare(ta, tb) || b.updated_at - a.updated_at;
+	});
 }
 
 export function listNotes(userId: string, filter: NoteFilter): NoteSummary[] {
@@ -96,9 +122,20 @@ export function listNotes(userId: string, filter: NoteFilter): NoteSummary[] {
 				)
 				.all(match, ...params)
 		: getDb()
-				.prepare(`SELECT ${LIST_COLS} FROM notes n WHERE ${where.join(' AND ')} ORDER BY ${VIEWS[filter.view].order}`)
+				.prepare(`SELECT ${LIST_COLS} FROM notes n WHERE ${where.join(' AND ')} ORDER BY ${listOrder(filter)}`)
 				.all(...params);
-	return (rows as unknown as NoteRow[]).map(toSummary);
+	const list = rows as unknown as NoteRow[];
+	const sort = filter.sort ?? DEFAULT_SORT;
+	if (!match && filter.view !== 'trash' && sort.by === 'title') {
+		// Pinned notes stay on top in All notes; each group is sorted on its own.
+		const pinnedFirst = filter.view === 'all';
+		const top = pinnedFirst ? list.filter((r) => r.pinned === 1) : [];
+		const rest = pinnedFirst ? list.filter((r) => r.pinned !== 1) : list;
+		sortByTitle(top, sort.order);
+		sortByTitle(rest, sort.order);
+		return [...top, ...rest].map(toSummary);
+	}
+	return list.map(toSummary);
 }
 
 function tagsOf(noteId: string): string[] {

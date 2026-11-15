@@ -10,6 +10,7 @@ import type {
 	NotePatch,
 	NoteSummary,
 	NoteTitle,
+	NoteSort,
 	NoteVersion,
 	NoteVersionSummary,
 	TagCount,
@@ -22,6 +23,7 @@ export interface NoteQuery {
 	q?: string;
 	notebook?: string | null;
 	tag?: string | null;
+	sort?: NoteSort;
 }
 
 export class ApiError extends Error {
@@ -83,6 +85,10 @@ export const api = {
 		if (query.q) params.set('q', query.q);
 		if (query.notebook) params.set('notebook', query.notebook);
 		if (query.tag) params.set('tag', query.tag);
+		if (query.sort) {
+			params.set('sort', query.sort.by);
+			params.set('order', query.sort.order);
+		}
 		return request<{ notes: NoteSummary[] }>('GET', `/notes?${params}`);
 	},
 	getNote: (id: string) => request<Note>('GET', notePath(id)),
@@ -113,6 +119,8 @@ export const api = {
 		request<{ otherSessionsSignedOut: number }>('POST', '/me/password', { currentPassword, newPassword }),
 	countOtherSessions: () => request<{ otherSessions: number }>('GET', '/me/sessions'),
 	signOutOtherSessions: () => request<{ signedOut: number }>('DELETE', '/me/sessions'),
+	getPreferences: () => request<{ noteSort: NoteSort }>('GET', '/me/preferences'),
+	setNoteSort: (noteSort: NoteSort) => request<{ noteSort: NoteSort }>('PATCH', '/me/preferences', { noteSort }),
 	listTokens: () => request<{ tokens: ApiToken[] }>('GET', '/me/tokens'),
 	createToken: (name: string, scope: TokenScope, expiresInDays: number | null) =>
 		request<{ token: ApiToken; secret: string }>('POST', '/me/tokens', { name, scope, expiresInDays }),

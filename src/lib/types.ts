@@ -22,8 +22,23 @@ export interface NoteSummary {
 	pinned: boolean;
 	trashed: boolean;
 	notebookId: string | null;
+	createdAt: number;
 	updatedAt: number;
 }
+
+/** How note lists are ordered. Searches are ordered by relevance, and the trash by when notes were trashed. */
+export interface NoteSort {
+	by: 'updated' | 'created' | 'title';
+	order: 'asc' | 'desc';
+}
+
+export const DEFAULT_SORT: NoteSort = { by: 'updated', order: 'desc' };
+
+export const isNoteSort = (v: unknown): v is NoteSort =>
+	!!v &&
+	typeof v === 'object' &&
+	['updated', 'created', 'title'].includes((v as NoteSort).by) &&
+	['asc', 'desc'].includes((v as NoteSort).order);
 
 export interface Note {
 	id: string;
