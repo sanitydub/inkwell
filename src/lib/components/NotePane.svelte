@@ -209,6 +209,7 @@
 			{#if !note.trashed}
 				<FormatToolbar
 					onformat={(command) => editor?.format(command)}
+					onhighlight={(color) => editor?.applyHighlight(color)}
 					{showMarkdown}
 					ontogglemarkdown={toggleShowMarkdown}
 				/>

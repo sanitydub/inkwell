@@ -20,6 +20,10 @@
 	--danger-soft: rgb(157 48 39 / 0.08);
 	--code-bg: #e5eae3;
 	--mark: #ece08f;
+	--hl-green: #cdebc5;
+	--hl-blue: #cfe0f7;
+	--hl-pink: #f6d0de;
+	--hl-purple: #e2d5f5;
 	--diff-add: rgb(47 107 69 / 0.14);
 	--diff-del: rgb(157 48 39 / 0.12);
 
@@ -57,6 +61,10 @@
 		--danger-soft: rgb(240 143 132 / 0.1);
 		--code-bg: #222326;
 		--mark: #5c5520;
+		--hl-green: #2f4f2c;
+		--hl-blue: #26405e;
+		--hl-pink: #5a2a3d;
+		--hl-purple: #43325e;
 		--diff-add: rgb(147 207 164 / 0.16);
 		--diff-del: rgb(240 143 132 / 0.15);
 		--syn-keyword: #cfa3ef;
@@ -84,6 +92,10 @@
 	--danger-soft: rgb(240 143 132 / 0.1);
 	--code-bg: #222326;
 	--mark: #5c5520;
+	--hl-green: #2f4f2c;
+	--hl-blue: #26405e;
+	--hl-pink: #5a2a3d;
+	--hl-purple: #43325e;
 	--diff-add: rgb(147 207 164 / 0.16);
 	--diff-del: rgb(240 143 132 / 0.15);
 	--syn-keyword: #cfa3ef;
@@ -144,6 +156,25 @@ button {
 	overflow: hidden;
 	clip-path: inset(50%);
 	white-space: nowrap;
+}
+
+/* Highlights: ==yellow== and <mark class="hl-…"> colours, wherever notes are rendered. */
+mark {
+	background: var(--mark);
+	color: inherit;
+	border-radius: 3px;
+}
+mark.hl-green {
+	background: var(--hl-green);
+}
+mark.hl-blue {
+	background: var(--hl-blue);
+}
+mark.hl-pink {
+	background: var(--hl-pink);
+}
+mark.hl-purple {
+	background: var(--hl-purple);
 }
 
 /* Shared controls */

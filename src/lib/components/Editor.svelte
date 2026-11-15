@@ -28,7 +28,7 @@
 	import { tags as t } from '@lezer/highlight';
 	import { tagRegExp } from '#lib/tags.ts';
 	import { linkRegExp, linkTarget } from '#lib/links.ts';
-	import { applyFormat, formatKeymap, type FormatCommand } from '#lib/editor-format.ts';
+	import { applyFormat, formatKeymap, setHighlight, type FormatCommand, type HighlightColor } from '#lib/editor-format.ts';
 	import { livePreview } from '#lib/live-preview.ts';
 
 	interface Props {
@@ -60,6 +60,13 @@
 
 	let host: HTMLDivElement;
 	let view: EditorView | undefined;
+
+	/** Highlights the selection in a colour, or removes the highlight with null. */
+	export function applyHighlight(color: HighlightColor | null) {
+		if (!view) return;
+		setHighlight(view, color);
+		view.focus();
+	}
 
 	/** Applies a toolbar formatting command and keeps the cursor in the editor. */
 	export function format(command: FormatCommand) {
@@ -186,15 +193,25 @@
 		{ decorations: (plugin) => plugin.decorations }
 	);
 
-	// ==Highlights== and <u>underlines</u> look like what they'll become.
+	// ==Highlights==, <mark class="hl-green">coloured highlights</mark> and <u>underlines</u> look
+	// like what they'll become.
 	const highlightMark = Decoration.mark({ class: 'cm-md-highlight' });
+	const colorMarks = new Map<string, Decoration>();
+	const colorMark = (color: string) => {
+		if (!colorMarks.has(color)) colorMarks.set(color, Decoration.mark({ class: `cm-md-highlight cm-hl-${color}` }));
+		return colorMarks.get(color)!;
+	};
 	const underlineMark = Decoration.mark({ class: 'cm-md-underline' });
 	const inlineStyleMatcher = new MatchDecorator({
-		regexp: /==(?!=)(?=\S)(?:.*?\S)==(?!=)|<u>.+?<\/u>/g,
+		regexp: /==(?!=)(?=\S)(?:.*?\S)==(?!=)|<u>.+?<\/u>|<mark class="hl-([a-z]+)">.+?<\/mark>/g,
 		decorate: (add, from, to, match, view) => {
-			// For <u>…</u>, check the text inside: the tag itself counts as HTML.
-			const isHighlight = match[0].startsWith('==');
-			if (!inCodeOrLink(view, isHighlight ? from : from + 3, false)) add(from, to, isHighlight ? highlightMark : underlineMark);
+			// For tags, check the text inside: the tag itself counts as HTML.
+			if (match[0].startsWith('==')) {
+				if (!inCodeOrLink(view, from, false)) add(from, to, highlightMark);
+			} else if (match[1]) {
+				const open = match[0].indexOf('>') + 1;
+				if (!inCodeOrLink(view, from + open, false)) add(from, to, colorMark(match[1]));
+			} else if (!inCodeOrLink(view, from + 3, false)) add(from, to, underlineMark);
 		}
 	});
 	const inlineStyles = ViewPlugin.fromClass(
@@ -287,6 +304,10 @@
 
 	const theme = EditorView.theme({
 		'.cm-md-highlight': { backgroundColor: 'var(--mark)', borderRadius: '3px' },
+		'.cm-md-highlight.cm-hl-green': { backgroundColor: 'var(--hl-green)' },
+		'.cm-md-highlight.cm-hl-blue': { backgroundColor: 'var(--hl-blue)' },
+		'.cm-md-highlight.cm-hl-pink': { backgroundColor: 'var(--hl-pink)' },
+		'.cm-md-highlight.cm-hl-purple': { backgroundColor: 'var(--hl-purple)' },
 		'.cm-md-underline': { textDecoration: 'underline', textUnderlineOffset: '0.2em' },
 		'.cm-wikilink': {
 			color: 'var(--accent)',

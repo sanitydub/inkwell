@@ -1,9 +1,11 @@
 // Formatting commands for the Markdown editor (toolbar buttons and shortcuts). They edit the
 // Markdown text directly, so notes stay plain Markdown: underline is <u>…</u> and highlight is
-// ==…==, the two things Markdown itself has no syntax for.
+// ==…== (yellow) or <mark class="hl-green">…</mark> (other colours), things Markdown itself has no
+// syntax for.
 
 import { EditorSelection, type ChangeSpec, type EditorState, type Line } from '@codemirror/state';
 import type { EditorView, KeyBinding } from '@codemirror/view';
+import { preferences } from './preferences.svelte';
 
 export type FormatCommand =
 	| 'bold'
@@ -28,7 +30,6 @@ const WRAPS = {
 	italic: ['*', '*'],
 	underline: ['<u>', '</u>'],
 	strike: ['~~', '~~'],
-	highlight: ['==', '=='],
 	code: ['`', '`']
 } as const;
 
@@ -112,6 +113,92 @@ function toggleWrap(view: EditorView, command: WrapCommand) {
 			range: range.empty
 				? EditorSelection.cursor(range.head + before.length)
 				: EditorSelection.range(from + before.length, to + before.length)
+		};
+	});
+	view.dispatch({ ...spec, scrollIntoView: true, userEvent: 'input.format' });
+}
+
+// ---- Highlight colours ------------------------------------------------------------------------
+
+export const HIGHLIGHT_COLORS = ['yellow', 'green', 'blue', 'pink', 'purple'] as const;
+export type HighlightColor = (typeof HIGHLIGHT_COLORS)[number];
+
+/** Markers for a colour. Yellow uses Obsidian's ==…== so it stays portable. */
+const highlightMarkers = (color: HighlightColor): [string, string] =>
+	color === 'yellow' ? ['==', '=='] : [`<mark class="hl-${color}">`, '</mark>'];
+
+const OPEN_MARK = /<mark class="hl-([a-z]+)">$/;
+
+/** The highlight wrapped around from..to, if any: its colour and the marker lengths. */
+function highlightAround(state: EditorState, from: number, to: number) {
+	if (isWrapped(state, from, to, '==', '==')) return { color: 'yellow' as HighlightColor, before: 2, after: 2 };
+	const open = OPEN_MARK.exec(state.doc.sliceString(Math.max(0, from - 40), from));
+	if (open && state.doc.sliceString(to, to + 7) === '</mark>') {
+		return { color: open[1] as HighlightColor, before: open[0].length, after: 7 };
+	}
+	return null;
+}
+
+/** The highlight the selection itself starts and ends with, if any. */
+function highlightInside(text: string) {
+	const yellow = /^==(?!=)([\s\S]*\S)==$/.exec(text);
+	if (yellow) return { color: 'yellow' as HighlightColor, inner: yellow[1] };
+	const mark = /^<mark class="hl-([a-z]+)">([\s\S]*)<\/mark>$/.exec(text);
+	if (mark) return { color: mark[1] as HighlightColor, inner: mark[2] };
+	return null;
+}
+
+/**
+ * Highlights the selection (or the word at the cursor) in a colour. An existing highlight in another
+ * colour is replaced; the same colour again, or `null`, removes it.
+ */
+export function setHighlight(view: EditorView, color: HighlightColor | null) {
+	if (view.state.readOnly) return;
+	const { state } = view;
+	const spec = state.changeByRange((range) => {
+		let from = range.from;
+		let to = range.to;
+		if (range.empty) {
+			const word = state.wordAt(range.head);
+			if (!word) {
+				if (!color) return { range };
+				const [before, after] = highlightMarkers(color);
+				return { changes: { from, insert: before + after }, range: EditorSelection.cursor(from + before.length) };
+			}
+			from = word.from;
+			to = word.to;
+		} else {
+			while (from < to && /\s/.test(state.doc.sliceString(from, from + 1))) from++;
+			while (to > from && /\s/.test(state.doc.sliceString(to - 1, to))) to--;
+		}
+
+		// Find the text without any highlight it already has.
+		let start = from;
+		let end = to;
+		let inner = state.doc.sliceString(from, to);
+		let current: HighlightColor | null = null;
+		const around = highlightAround(state, from, to);
+		if (around) {
+			start = from - around.before;
+			end = to + around.after;
+			current = around.color;
+		} else {
+			const inside = range.empty ? null : highlightInside(inner);
+			if (inside) {
+				inner = inside.inner;
+				current = inside.color;
+			}
+		}
+
+		const next = color && color !== current ? color : null;
+		const [before, after] = next ? highlightMarkers(next) : ['', ''];
+		const insert = before + inner + after;
+		const cursorOffset = range.empty ? range.head - from : 0;
+		return {
+			changes: { from: start, to: end, insert },
+			range: range.empty
+				? EditorSelection.cursor(start + before.length + cursorOffset)
+				: EditorSelection.range(start + before.length, start + before.length + inner.length)
 		};
 	});
 	view.dispatch({ ...spec, scrollIntoView: true, userEvent: 'input.format' });
@@ -256,8 +343,10 @@ export function applyFormat(view: EditorView, command: FormatCommand) {
 		case 'italic':
 		case 'underline':
 		case 'strike':
-		case 'highlight':
 			return toggleWrap(view, command);
+		case 'highlight':
+			// The button and Ctrl+Shift+H use the colour picked last.
+			return setHighlight(view, preferences.highlightColor);
 		case 'code':
 			return toggleCode(view);
 		case 'heading':

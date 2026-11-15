@@ -5,6 +5,8 @@ export type Theme = 'system' | 'light' | 'dark';
 
 const THEME_KEY = 'inkwell-theme'; // also read by src/app.html before first paint
 const SOURCE_KEY = 'inkwell-show-markdown';
+const HIGHLIGHT_KEY = 'inkwell-highlight-color';
+const HIGHLIGHT_COLORS = ['yellow', 'green', 'blue', 'pink', 'purple'];
 
 export const THEME_LABELS: Record<Theme, string> = {
 	system: 'Theme: match system',
@@ -34,12 +36,16 @@ class Preferences {
 	theme = $state<Theme>('system');
 	/** Plain Markdown source instead of the live view. */
 	showMarkdown = $state(false);
+	/** The highlight colour the toolbar button and Ctrl+Shift+H apply. */
+	highlightColor = $state<'yellow' | 'green' | 'blue' | 'pink' | 'purple'>('yellow');
 
 	/** Reads the saved choices. Call once in the browser. */
 	load() {
 		const saved = read(THEME_KEY);
 		this.theme = saved === 'light' || saved === 'dark' ? saved : 'system';
 		this.showMarkdown = read(SOURCE_KEY) === 'true';
+		const color = read(HIGHLIGHT_KEY);
+		if (color && HIGHLIGHT_COLORS.includes(color)) this.highlightColor = color as typeof this.highlightColor;
 	}
 
 	setTheme(theme: Theme) {
@@ -52,6 +58,11 @@ class Preferences {
 
 	cycleTheme() {
 		this.setTheme(NEXT_THEME[this.theme]);
+	}
+
+	setHighlightColor(color: typeof this.highlightColor) {
+		this.highlightColor = color;
+		write(HIGHLIGHT_KEY, color === 'yellow' ? null : color);
 	}
 
 	toggleShowMarkdown() {

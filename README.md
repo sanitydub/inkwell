@@ -9,7 +9,7 @@ A simple note-taking app you host yourself. Write in a live view that formats as
 | <img src="docs/screenshots/desktop-dark.png" alt="Inkwell in dark mode, showing a note with its Linked from list open"> | <img src="docs/screenshots/mobile-list.png" alt="The note list on a phone" width="150"> <img src="docs/screenshots/mobile-note.png" alt="A note open on a phone, in dark mode" width="150"> |
 
 - One live view: you edit the formatted note directly, like Obsidian's Live Preview. Markdown symbols show only on the line you're editing, checkboxes tick with a click, and links and tags open with a click. **Show Markdown** on the toolbar switches to plain source.
-- Formatting toolbar and shortcuts: bold, italic, underline, strikethrough, highlight, headings, bulleted/numbered/task lists, quotes, code, links and tables
+- Formatting toolbar and shortcuts: bold, italic, underline, strikethrough, highlight in five colours, headings, bulleted/numbered/task lists, quotes, code, links and tables
 - Full-text search with prefix matching
 - Quick switcher (Ctrl/⌘+P) to jump to any note by typing part of its title, and a command palette (Ctrl/⌘+Shift+P) for everything else
 - Images and file attachments: paste or drop them into a note; images show in the note, other files open with a click
@@ -89,13 +89,13 @@ Notes are Markdown, and the toolbar above the editor writes it for you. Click a 
 | Italic | Ctrl+I | `*text*` |
 | Underline | Ctrl+U | `<u>text</u>` |
 | Strikethrough | Ctrl+Shift+X | `~~text~~` |
-| Highlight | Ctrl+Shift+H | `==text==` |
+| Highlight | Ctrl+Shift+H | `==text==` (yellow), or `<mark class="hl-green">text</mark>` for green, blue, pink and purple |
 | Code | Ctrl+E | `` `text` `` (a fenced block for several lines) |
 | Heading 1–3 | Ctrl+Alt+1 / 2 / 3 | `#`, `##`, `###` |
 | Bulleted / numbered / task list | Ctrl+Shift+8 / 7 / 9 | `- `, `1. `, `- [ ] ` |
 | Link | Ctrl+K (in the editor) | `[text](https://…)` |
 
-Each line break shows as a new line, as in Obsidian; leave a blank line to start a new paragraph. On a Mac, use ⌘ instead of Ctrl. Quotes and tables are on the toolbar. Underline and highlight use the same syntax as Obsidian, so notes move between the two cleanly; Word imports keep both.
+Each line break shows as a new line, as in Obsidian; leave a blank line to start a new paragraph. On a Mac, use ⌘ instead of Ctrl. Quotes and tables are on the toolbar. Underline and yellow highlights use the same syntax as Obsidian, so notes move between the two cleanly. Pick a highlight colour with the arrow next to the Highlight button; the button and Ctrl+Shift+H then use that colour, and applying the same colour again removes it. Other colours are stored as `<mark class="hl-…">`, which Obsidian and other Markdown apps still show highlighted, in their default colour. Word imports keep underlines and highlights, with Word's highlight colours matched to the nearest of these.
 
 ## Keyboard shortcuts
 

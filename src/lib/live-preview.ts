@@ -285,7 +285,8 @@ function build(state: EditorState): DecorationSet {
 					if (!isActive(from)) hide(from, from + 1);
 					return;
 				case 'HTMLTag':
-					if (/^<\/?u>$/i.test(doc.sliceString(from, to)) && !isActive(from)) hide(from, to);
+					// Underline and coloured-highlight tags; other HTML stays visible.
+					if (/^(<\/?u>|<mark class="hl-[a-z]+">|<\/mark>)$/i.test(doc.sliceString(from, to)) && !isActive(from)) hide(from, to);
 					return;
 				case 'Table':
 					if (!isActive(from, to)) {

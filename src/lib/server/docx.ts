@@ -27,8 +27,28 @@ interface Segment {
 	italic: boolean;
 	strike: boolean;
 	underline: boolean;
-	highlight: boolean;
+	/** Inkwell highlight colour, or null for none. */
+	highlight: string | null;
 	href?: string;
+}
+
+/** Word's highlight colours, mapped onto Inkwell's five. Anything else becomes yellow. */
+const WORD_HIGHLIGHTS: Record<string, string> = {
+	green: 'green',
+	darkgreen: 'green',
+	cyan: 'blue',
+	blue: 'blue',
+	darkblue: 'blue',
+	darkcyan: 'blue',
+	magenta: 'pink',
+	red: 'pink',
+	darkred: 'pink',
+	darkmagenta: 'purple'
+};
+
+function highlightOf(el?: XmlElement): string | null {
+	if (!isOn(el)) return null;
+	return WORD_HIGHLIGHTS[(el!.attrs['w:val'] ?? '').toLowerCase()] ?? 'yellow';
 }
 
 const isOn = (el?: XmlElement) => !!el && !['0', 'false', 'off', 'none'].includes((el.attrs['w:val'] ?? '').toLowerCase());
@@ -102,7 +122,7 @@ function collect(el: XmlElement, ctx: Context, out: Segment[], href?: string) {
 					italic: isOn(child(rPr, 'w:i')),
 					strike: isOn(child(rPr, 'w:strike')) || isOn(child(rPr, 'w:dstrike')),
 					underline: isOn(child(rPr, 'w:u')),
-					highlight: isOn(child(rPr, 'w:highlight')),
+					highlight: highlightOf(child(rPr, 'w:highlight')),
 					href
 				});
 			}
@@ -137,7 +157,8 @@ function render(segments: Segment[]): string {
 			const trail = text.slice(text.indexOf(inner) + inner.length);
 			let out = inner;
 			if (s.underline && !s.href) out = `<u>${out}</u>`;
-			if (s.highlight) out = `==${out}==`;
+			if (s.highlight === 'yellow') out = `==${out}==`;
+			else if (s.highlight) out = `<mark class="hl-${s.highlight}">${out}</mark>`;
 			if (s.strike) out = `~~${out}~~`;
 			if (s.italic) out = `*${out}*`;
 			if (s.bold) out = `**${out}**`;
