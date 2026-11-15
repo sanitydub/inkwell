@@ -24,17 +24,23 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 ## Run it with Docker
 
 ```bash
+git clone https://github.com/sanitydub/inkwell.git
+cd inkwell
+cp .env.docker.example .env   # then edit .env
 docker compose up -d
 ```
 
-Open http://localhost:3000 and create the first account. Notes are stored in the `inkwell-data` volume.
+Open the address you set as `INKWELL_ORIGIN` (by default http://localhost:3000) and create the first account; it becomes the admin. Notes are stored in the `inkwell-data` Docker volume, so they survive restarts, upgrades and `docker compose down`.
 
-Before exposing it to a network, edit `docker-compose.yml`:
+Settings live in `.env`, next to `docker-compose.yml`:
 
-- `ORIGIN`: the exact address people use, e.g. `https://notes.example.com`
-- `ALLOW_REGISTRATION`: set to `"false"` once everyone has an account (the first account can always be created, and admins can still add people in Settings)
+- `INKWELL_PORT`: the port on your machine (default 3000). Change it if something else already uses 3000.
+- `INKWELL_ORIGIN`: the exact address people type, including the port, e.g. `http://homeserver:3300` or `https://notes.example.com`.
+- `ALLOW_REGISTRATION`: set to `false` once everyone has an account (the first account can always be created, and admins can still add people in Settings).
 
-Put it behind a reverse proxy with HTTPS (Caddy, Traefik, nginx) for anything beyond your LAN. Session cookies are marked `Secure` automatically when the app is served over HTTPS.
+To upgrade, pull the latest code and rebuild: `git pull && docker compose up -d --build`.
+
+Put it behind a reverse proxy with HTTPS (Caddy, Traefik, nginx) for anything beyond your LAN or tailnet. Session cookies are marked `Secure` automatically when the app is served over HTTPS.
 
 ## Run it without Docker
 

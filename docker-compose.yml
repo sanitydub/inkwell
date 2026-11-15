@@ -1,18 +1,22 @@
+# Settings come from a .env file next to this one (see .env.docker.example), so you can
+# update this file without losing them. Every setting has a default.
 services:
   inkwell:
     build: .
     ports:
-      - "3000:3000"
+      # Change INKWELL_PORT if 3000 is already taken on your machine.
+      - "${INKWELL_PORT:-3000}:3000"
     volumes:
       - inkwell-data:/data
     environment:
-      # The address people type into their browser. Required for production.
-      ORIGIN: http://localhost:3000
-      # Set to "false" once everyone who needs an account has one.
-      ALLOW_REGISTRATION: "true"
-      # Behind a reverse proxy (Caddy, Traefik, nginx), uncomment so sign-in limits apply per visitor:
-      # ADDRESS_HEADER: x-forwarded-for
-      # XFF_DEPTH: "1"
+      # The address people type into their browser, including the port.
+      ORIGIN: ${INKWELL_ORIGIN:-http://localhost:3000}
+      # Set to "false" once everyone who needs an account has one (admins can still add people).
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      # Behind a reverse proxy (Caddy, Traefik, nginx), set ADDRESS_HEADER=x-forwarded-for so
+      # sign-in limits apply per visitor rather than to the proxy.
+      ADDRESS_HEADER: ${ADDRESS_HEADER:-}
+      XFF_DEPTH: ${XFF_DEPTH:-1}
     restart: unless-stopped
 
 volumes:
