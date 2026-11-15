@@ -89,6 +89,31 @@ class RuleWidget extends WidgetType {
 	}
 }
 
+class ImageWidget extends WidgetType {
+	constructor(
+		readonly src: string,
+		readonly alt: string
+	) {
+		super();
+	}
+	eq(other: ImageWidget) {
+		return other.src === this.src && other.alt === this.alt;
+	}
+	toDOM() {
+		const img = document.createElement('img');
+		img.className = 'cm-live-image';
+		img.src = this.src;
+		img.alt = this.alt;
+		img.loading = 'lazy';
+		img.draggable = false;
+		return img;
+	}
+	// Clicking the image lets the editor put the cursor there, which reveals its Markdown.
+	ignoreEvent() {
+		return false;
+	}
+}
+
 class TableWidget extends WidgetType {
 	constructor(readonly source: string) {
 		super();
@@ -231,8 +256,29 @@ function build(state: EditorState): DecorationSet {
 						out.push(Decoration.mark({ class: 'cm-live-link', attributes: { 'data-live-href': href } }).range(from, to));
 					}
 					return;
-				case 'Image':
+				case 'Image': {
+					const url = node.getChild('URL');
+					const marks = node.getChildren('LinkMark');
+					if (isActive(from, to) || !url || marks.length < 2) return false;
+					const src = doc.sliceString(url.from, url.to);
+					const alt = doc.sliceString(marks[0].to, marks[1].from);
+					if (src.startsWith('/api/attachments/')) {
+						// Your own uploads show as pictures.
+						out.push(Decoration.replace({ widget: new ImageWidget(src, alt) }).range(from, to));
+					} else {
+						// Images on other sites aren't loaded (opening a note never contacts outside servers);
+						// they show as a link instead.
+						hide(from, marks[0].to);
+						hide(marks[1].from, to);
+						out.push(
+							Decoration.mark({ class: 'cm-live-link', attributes: { 'data-live-href': src, title: src } }).range(
+								marks[0].to,
+								Math.max(marks[0].to, marks[1].from)
+							)
+						);
+					}
 					return false;
+				}
 				case 'Escape':
 				case 'HardBreak':
 					// "\*" shows as "*"; a backslash line break shows as just the break.
@@ -319,7 +365,9 @@ function clickHandler(options: LivePreviewOptions) {
 			event.preventDefault();
 			if (target.dataset.liveHref) {
 				const href = target.dataset.liveHref;
-				if (/^(https?:|mailto:)/i.test(href)) window.open(href, '_blank', 'noopener,noreferrer');
+				if (/^(https?:|mailto:)/i.test(href) || href.startsWith('/api/attachments/')) {
+					window.open(href, '_blank', 'noopener,noreferrer');
+				}
 			} else if (target.dataset.liveTitle) {
 				options.onOpenLink?.(target.dataset.liveTitle);
 			} else {
@@ -370,6 +418,13 @@ const theme = EditorView.theme({
 		cursor: 'pointer'
 	},
 	'.cm-tag': { cursor: 'pointer' },
+	'.cm-live-image': {
+		display: 'block',
+		maxWidth: '100%',
+		maxHeight: '70vh',
+		margin: '0.4em 0',
+		borderRadius: '6px'
+	},
 	'.cm-live-table': { padding: '0.3em 0', overflowX: 'auto', fontSize: '0.9em' },
 	'.cm-live-table table': { borderCollapse: 'collapse' },
 	'.cm-live-table th, .cm-live-table td': {

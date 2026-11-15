@@ -13,6 +13,9 @@ services:
       ORIGIN: ${INKWELL_ORIGIN:-http://localhost:3000}
       # Set to "false" once everyone who needs an account has one (admins can still add people).
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      # Largest image or file one attachment may be. Keep BODY_SIZE_LIMIT above it.
+      MAX_ATTACHMENT_SIZE: ${MAX_ATTACHMENT_SIZE:-10M}
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-25M}
       # Behind a reverse proxy (Caddy, Traefik, nginx), set ADDRESS_HEADER=x-forwarded-for so
       # sign-in limits apply per visitor rather than to the proxy.
       ADDRESS_HEADER: ${ADDRESS_HEADER:-}

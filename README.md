@@ -1,6 +1,6 @@
 # Inkwell
 
-A simple note-taking app you host yourself. Write in a live view that formats as you type (and stays plain Markdown underneath), find anything with full-text search, and keep everything in a single SQLite file on your own server.
+A simple note-taking app you host yourself. Write in a live view that formats as you type (and stays plain Markdown underneath), find anything with full-text search, and keep everything in SQLite and a folder of attachments on your own server.
 
 ![Inkwell on desktop: the note list, notebooks and tags in the sidebar, and a note open in the live view with its formatting toolbar](docs/screenshots/desktop-light.png)
 
@@ -11,6 +11,7 @@ A simple note-taking app you host yourself. Write in a live view that formats as
 - One live view: you edit the formatted note directly, like Obsidian's Live Preview. Markdown symbols show only on the line you're editing, checkboxes tick with a click, and links and tags open with a click. **Show Markdown** on the toolbar switches to plain source.
 - Formatting toolbar and shortcuts: bold, italic, underline, strikethrough, highlight, headings, bulleted/numbered/task lists, quotes, code, links and tables
 - Full-text search with prefix matching
+- Images and file attachments: paste or drop them into a note; images show in the note, other files open with a click
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
 - `[[Wiki-links]]` between notes with title suggestions as you type, a “Linked from” list of backlinks on every note, and an offer to update links when you rename a note
 - Pin notes, move them to the trash, restore them, or delete them for good
@@ -61,7 +62,8 @@ DATA_DIR=./data ORIGIN=http://localhost:3000 node build
 | `ALLOW_REGISTRATION` | `true`  | Whether new people can sign up. The first account always can, and admins can always add accounts. |
 | `ORIGIN`             | —       | Public URL of the app. Needed in production.                   |
 | `PORT`               | `3000`  | Port to listen on.                                             |
-| `BODY_SIZE_LIMIT`    | `512K`  | Largest request accepted (Docker image sets `10M` for big notes). |
+| `MAX_ATTACHMENT_SIZE` | `10M`  | Largest image or file one attachment may be. |
+| `BODY_SIZE_LIMIT`    | `512K`  | Largest request accepted. Must be above `MAX_ATTACHMENT_SIZE` (the Docker image sets `25M`). |
 
 Behind a proxy that terminates TLS, you can use `PROTOCOL_HEADER=x-forwarded-proto` and `HOST_HEADER=x-forwarded-host` instead of `ORIGIN`. See the [adapter-node docs](https://svelte.dev/docs/kit/adapter-node) for all server options.
 
@@ -93,7 +95,7 @@ Each line break shows as a new line, as in Obsidian; leave a blank line to start
 
 ## Accounts
 
-The first account created on a server is its admin. Everyone can open **Settings** (click your name at the bottom of the sidebar) to change their password, which signs out their other devices, or to sign out other devices directly.
+The first account created on a server is its admin. Everyone can open **Settings** (click your name at the bottom of the sidebar) to change their password, which signs out their other devices, or to sign out other devices directly. Settings also lists your attachments, shows which notes use each one, and can delete the ones no note links to. Unused files are never deleted automatically.
 
 Admins also see **People on this server**, where they can:
 
@@ -112,21 +114,24 @@ Use **Import** at the bottom of the sidebar to bring in `.md`, `.txt` or Word `.
 - Folders become notebooks. Nested folders get a combined name like “Projects / Atlas”, and a single folder wrapping the whole zip is ignored. Files go into an existing notebook if one has the same name.
 - Front matter with anything beyond those keys (Obsidian `aliases`, `tags:` lists, …) stays in the note so nothing is lost.
 - Word documents are converted to Markdown: headings, bold, italic and strikethrough, links, bulleted and numbered lists (nested too), quotes and tables come across. The note's title is the document's Title (from its properties or a Title-styled first line), otherwise the file name. Images, comments and footnotes are left out, and tracked changes are imported as accepted.
-- Images, attachments and app folders like `.obsidian/` are skipped.
+- Images and other files that a note links to, with a relative link or an Obsidian `![[embed]]`, become attachments. Files nothing links to, and app folders like `.obsidian/`, are skipped.
 - Importing the same files twice creates duplicates.
 
-Inkwell's own export imports back exactly. Uploads are limited by `BODY_SIZE_LIMIT` (the Docker image allows 10 MB); raise it, or import in smaller batches, for big archives.
+Inkwell's own export imports back exactly, attachments included. Uploads are limited by `BODY_SIZE_LIMIT` (the Docker image allows 25 MB); raise it, or import in smaller batches, for big archives.
 
 ## Backups
 
-To take your notes elsewhere, use **Export all notes** at the bottom of the sidebar (or `GET /api/export`). You get a zip with one folder per notebook and one Markdown file per note, each starting with a small YAML header (title, created and updated dates) that Obsidian, Joplin and most Markdown tools understand. Notes in the trash aren't included.
+To take your notes elsewhere, use **Export all notes** at the bottom of the sidebar (or `GET /api/export`). You get a zip with one folder per notebook and one Markdown file per note, each starting with a small YAML header (title, created and updated dates) that Obsidian, Joplin and most Markdown tools understand. Attachments go in an `attachments/` folder, and links in the notes point into it, so the export also opens in Obsidian. Notes in the trash aren't included.
 
 
-Everything lives in `DATA_DIR/inkwell.db`. To back it up while the app is running, use SQLite's online backup:
+Everything lives in `DATA_DIR`: notes, notebooks and accounts in `inkwell.db`, and uploaded images and files in `attachments/`. Back up both. While the app is running, use SQLite's online backup for the database and copy the folder:
 
 ```bash
 sqlite3 data/inkwell.db ".backup 'inkwell-backup.db'"
+cp -r data/attachments attachments-backup
 ```
+
+With Docker, both live in the `inkwell_inkwell-data` volume.
 
 ## Development
 
@@ -179,7 +184,12 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `PATCH`  | `/api/notebooks/:id`  | `{ name }`                                    |
 | `DELETE` | `/api/notebooks/:id`  | its notes are kept, without a notebook        |
 | `GET`    | `/api/tags`           | tags in use, with note counts                 |
-| `GET`    | `/api/export`         | zip of all notes outside the trash            |
+| `GET`    | `/api/export`         | zip of all notes outside the trash, with attachments |
+| `POST`   | `/api/attachments`    | multipart form data, one or more `files`; returns each file's `url` and ready-to-insert `markdown` |
+| `GET`    | `/api/attachments`    | your attachments, with the notes that link to each |
+| `GET`    | `/api/attachments/:id/:name` | the file (owner only); verified images display inline, other files download |
+| `DELETE` | `/api/attachments/:id` | deletes one attachment |
+| `DELETE` | `/api/attachments?unused=true` | deletes attachments no note links to |
 | `POST`   | `/api/import`         | multipart form data, one or more `files` (.md, .txt, .docx, .zip) |
 | `GET`    | `/api/titles`         | every note title (for resolving links)        |
 | `GET`    | `/api/notes/:id/backlinks` | notes that `[[link]]` here, with the linking line |

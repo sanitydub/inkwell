@@ -393,6 +393,18 @@ export class Workspace {
 		}
 	}
 
+	// ---- Attachments --------------------------------------------------------
+
+	/** Uploads files pasted or dropped into the editor. Shows the error and returns [] if it fails. */
+	async uploadAttachments(files: File[]) {
+		try {
+			return await api.uploadAttachments(files);
+		} catch (err) {
+			this.#fail(err);
+			return [];
+		}
+	}
+
 	// ---- Import -------------------------------------------------------------
 
 	importing = $state(false);
@@ -462,7 +474,7 @@ export class Workspace {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-function describeImport({ imported, notebooksCreated, skipped }: ImportResult): string {
+function describeImport({ imported, notebooksCreated, attachments, skipped }: ImportResult): string {
 	if (!imported) {
 		return skipped.length
 			? `Nothing imported. Inkwell couldn’t use any of the ${plural(skipped.length, 'file')}: it imports Markdown (.md), text (.txt) and Word (.docx) files.`
@@ -470,6 +482,7 @@ function describeImport({ imported, notebooksCreated, skipped }: ImportResult): 
 	}
 	let text = `Imported ${plural(imported, 'note')}`;
 	if (notebooksCreated.length) text += ` into ${plural(notebooksCreated.length, 'new notebook')}`;
+	if (attachments) text += ` with ${plural(attachments, 'attachment')}`;
 	text += '.';
 	if (skipped.length) text += ` Skipped ${plural(skipped.length, 'file')} Inkwell can’t import.`;
 	return text;

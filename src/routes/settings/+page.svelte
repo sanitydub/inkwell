@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { ChevronLeft } from '@lucide/svelte';
 	import { api, ApiError } from '#lib/api.ts';
-	import type { ManagedUser } from '#lib/types.ts';
+	import type { AttachmentUsage, ManagedUser } from '#lib/types.ts';
 
 	let { data } = $props();
 	const me = $derived(data.user);
@@ -64,6 +64,54 @@
 		}
 	}
 
+	// ---- Attachments ------------------------------------------------------------
+
+	let attachments = $state<AttachmentUsage[] | null>(null);
+	let attachmentsStatus = $state<Status>(null);
+	const unused = $derived((attachments ?? []).filter((a) => !a.usedBy.length));
+	const totalBytes = $derived((attachments ?? []).reduce((sum, a) => sum + a.size, 0));
+
+	function formatBytes(bytes: number) {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+		return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+	}
+
+	async function loadAttachments() {
+		try {
+			attachments = (await api.listAttachments()).attachments;
+		} catch (err) {
+			attachmentsStatus = failure(err);
+		}
+	}
+
+	async function deleteOneAttachment(a: AttachmentUsage) {
+		const warning = a.usedBy.length
+			? ` It’s used in ${plural(a.usedBy.length, 'note')}, which will show a broken link.`
+			: '';
+		if (!confirm(`Delete “${a.name}”?${warning} This can’t be undone.`)) return;
+		attachmentsStatus = null;
+		try {
+			await api.deleteAttachment(a.id);
+			attachments = (attachments ?? []).filter((x) => x.id !== a.id);
+			attachmentsStatus = { ok: true, text: `Deleted “${a.name}”.` };
+		} catch (err) {
+			attachmentsStatus = failure(err);
+		}
+	}
+
+	async function deleteUnused() {
+		if (!confirm(`Delete ${plural(unused.length, 'unused attachment')}? No note links to them. This can’t be undone.`)) return;
+		attachmentsStatus = null;
+		try {
+			const { deleted, freedBytes } = await api.deleteUnusedAttachments();
+			await loadAttachments();
+			attachmentsStatus = { ok: true, text: `Deleted ${plural(deleted, 'attachment')} and freed ${formatBytes(freedBytes)}.` };
+		} catch (err) {
+			attachmentsStatus = failure(err);
+		}
+	}
+
 	// ---- People (admins) ----------------------------------------------------------
 
 	let users = $state<ManagedUser[]>([]);
@@ -81,6 +129,7 @@
 		} catch (err) {
 			devicesStatus = failure(err);
 		}
+		loadAttachments();
 		if (me.isAdmin) {
 			try {
 				users = (await api.listUsers()).users;
@@ -216,6 +265,51 @@
 		</p>
 		<button class="btn" disabled={!otherSessions} onclick={signOutOthers}>Sign out other devices</button>
 		{@render statusLine(devicesStatus)}
+	</section>
+
+	<section aria-labelledby="attachments-heading">
+		<h2 id="attachments-heading">Attachments</h2>
+		<p class="muted">Images and files you paste or drop into notes. Only you can open them.</p>
+		{#if attachments === null}
+			<p>Loading…</p>
+		{:else if !attachments.length}
+			<p>No attachments yet. Paste or drop an image or file into a note to add one.</p>
+		{:else}
+			<p>
+				{plural(attachments.length, 'file')}, {formatBytes(totalBytes)} in total.
+				{#if unused.length}{plural(unused.length, 'file')} {unused.length === 1 ? 'isn’t' : 'aren’t'} used in any note.{/if}
+			</p>
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th scope="col">File</th>
+							<th scope="col" class="num">Size</th>
+							<th scope="col">Used in</th>
+							<th scope="col"><span class="visually-hidden">Actions</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each attachments as a (a.id)}
+							<tr>
+								<td class="file"><a href={a.url} target="_blank" rel="noopener">{a.name}</a></td>
+								<td class="num">{formatBytes(a.size)}</td>
+								<td class="used" class:muted={!a.usedBy.length}>
+									{a.usedBy.length ? a.usedBy.map((n) => n.title.trim() || 'Untitled').join(', ') : 'Not used'}
+								</td>
+								<td class="actions"><button class="btn danger" onclick={() => deleteOneAttachment(a)}>Delete</button></td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<div class="after-table">
+				<button class="btn" disabled={!unused.length} onclick={deleteUnused}>
+					Delete unused{unused.length ? ` (${unused.length})` : ''}
+				</button>
+			</div>
+		{/if}
+		{@render statusLine(attachmentsStatus)}
 	</section>
 
 	{#if me.isAdmin}
@@ -481,6 +575,20 @@
 		height: 1.85rem;
 		padding: 0 0.6rem;
 		font-size: 0.8rem;
+	}
+	.file a {
+		color: var(--accent);
+		text-decoration-thickness: 1px;
+		text-underline-offset: 0.15em;
+	}
+	.file,
+	.used {
+		max-width: 16rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.after-table {
+		margin-top: 0.75rem;
 	}
 	.reset {
 		display: inline-flex;

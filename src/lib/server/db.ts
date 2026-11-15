@@ -105,15 +105,32 @@ const migrations: (string | ((db: DatabaseSync) => void))[] = [
 	`
 	ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
 	UPDATE users SET is_admin = 1 WHERE id = (SELECT id FROM users ORDER BY created_at LIMIT 1);
+	`,
+
+	// 5: attachments. Files live in DATA_DIR/attachments/<user id>/<id>; this is their index.
+	`
+	CREATE TABLE attachments (
+		id         TEXT PRIMARY KEY,
+		user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		name       TEXT NOT NULL,
+		type       TEXT NOT NULL,
+		size       INTEGER NOT NULL,
+		sha256     TEXT NOT NULL,
+		created_at INTEGER NOT NULL
+	);
+	CREATE INDEX attachments_user_hash ON attachments(user_id, sha256);
 	`
 ];
 
 let db: DatabaseSync | undefined;
 
+/** The data directory (database and attachments), as an absolute path. */
+export const dataDirectory = () => resolve(DATA_DIR);
+
 /** Opens the database on first use, so builds never touch the data directory. */
 export function getDb(): DatabaseSync {
 	if (db) return db;
-	const dataDir = resolve(DATA_DIR);
+	const dataDir = dataDirectory();
 	mkdirSync(dataDir, { recursive: true });
 	db = new DatabaseSync(join(dataDir, 'inkwell.db'));
 	db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');

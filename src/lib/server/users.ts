@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { getDb } from './db';
 import { createUser, parseNewCredentials, parsePassword, setPassword } from './auth';
+import { removeUserAttachments } from './attachments';
 import type { ManagedUser } from '#lib/types.ts';
 
 // Account management for admins.
@@ -74,4 +75,5 @@ export function adminDeleteUser(actorId: string, id: string) {
 	if (!target) error(404, NOT_FOUND);
 	if (target.isAdmin && adminCount() === 1) error(409, 'There has to be at least one admin.');
 	getDb().prepare('DELETE FROM users WHERE id = ?').run(id);
+	removeUserAttachments(id);
 }

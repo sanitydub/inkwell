@@ -71,3 +71,20 @@ export interface Backlink {
 	title: string;
 	context: string;
 }
+
+/** An uploaded image or file. Notes link to it with `url`. */
+export interface Attachment {
+	id: string;
+	name: string;
+	type: string;
+	size: number;
+	createdAt: number;
+	url: string;
+	/** Ready-to-insert Markdown: an image for images, a link for anything else. */
+	markdown: string;
+}
+
+/** An attachment as listed in Settings, with the notes that link to it. */
+export interface AttachmentUsage extends Attachment {
+	usedBy: { id: string; title: string }[];
+}

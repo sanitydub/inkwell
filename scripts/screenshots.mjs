@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
+import { crc32, deflateSync } from 'node:zlib';
 import { join, resolve } from 'node:path';
 import puppeteer from 'puppeteer-core';
 
@@ -92,6 +93,43 @@ const NOTES = [
 	}
 ];
 
+// A small picture for the demo plan: soil-brown ground under a soft green sky, drawn as raw pixels.
+function demoPng(width = 960, height = 360) {
+	const rows = [];
+	for (let y = 0; y < height; y++) {
+		const row = Buffer.alloc(1 + width * 3);
+		for (let x = 0; x < width; x++) {
+			const ground = y > height * 0.62 + Math.sin(x / 60) * 10;
+			const t = y / height;
+			const [r, g, b] = ground
+				? [96 - t * 20, 70 - t * 15, 48]
+				: [170 - t * 60, 205 - t * 50 + Math.sin(x / 90) * 6, 150 - t * 50];
+			// Rows of seedlings.
+			const sprout = ground && x % 80 < 6 && y < height * 0.62 + 40;
+			row.set(sprout ? [76, 140, 74] : [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v)))), 1 + x * 3);
+		}
+		rows.push(row);
+	}
+	const chunk = (type, data) => {
+		const len = Buffer.alloc(4);
+		len.writeUInt32BE(data.length);
+		const body = Buffer.concat([Buffer.from(type), data]);
+		const crc = Buffer.alloc(4);
+		crc.writeUInt32BE(crc32(body) >>> 0);
+		return Buffer.concat([len, body, crc]);
+	};
+	const header = Buffer.alloc(13);
+	header.writeUInt32BE(width, 0);
+	header.writeUInt32BE(height, 4);
+	header.set([8, 2, 0, 0, 0], 8);
+	return Buffer.concat([
+		Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+		chunk('IHDR', header),
+		chunk('IDAT', deflateSync(Buffer.concat(rows))),
+		chunk('IEND', Buffer.alloc(0))
+	]);
+}
+
 // ---- Helpers -------------------------------------------------------------------------------
 
 function findBrowser() {
@@ -157,6 +195,21 @@ async function seed(base) {
 		noteIds[note.title] = created.id;
 		await new Promise((r) => setTimeout(r, 15)); // distinct "last edited" times
 	}
+	// Attach a photo to the plan, through the same upload endpoint the editor uses.
+	const form = new FormData();
+	form.append('files', new Blob([demoPng()], { type: 'image/png' }), 'south-bed.png');
+	const upload = await fetch(`${base}/api/attachments`, {
+		method: 'POST',
+		headers: { cookie: `inkwell_session=${token}`, origin: base },
+		body: form
+	});
+	if (!upload.ok) throw new Error(`Couldn’t upload the demo image (${upload.status}).`);
+	const [image] = (await upload.json()).attachments;
+	const plan = NOTES.find((n) => n.title === 'Spring planting plan');
+	await call('PATCH', `/notes/${noteIds[plan.title]}`, {
+		content: plan.content.replace('> Water deeply', `${image.markdown}\n\n> Water deeply`)
+	});
+
 	// A second person, so the admin's People table on the settings page has something to show.
 	await call('POST', '/admin/users', { username: 'sam', password: 'demo-password-only' });
 	return { token, noteIds };

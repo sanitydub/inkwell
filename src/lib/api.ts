@@ -1,4 +1,4 @@
-import type { Backlink, ManagedUser, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, User, View } from './types';
+import type { Attachment, AttachmentUsage, Backlink, ManagedUser, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, User, View } from './types';
 
 export interface NoteQuery {
 	view: View;
@@ -48,6 +48,7 @@ async function send<T>(method: string, path: string, init: { headers?: Record<st
 export interface ImportResult {
 	imported: number;
 	notebooksCreated: string[];
+	attachments: number;
 	skipped: string[];
 }
 
@@ -97,6 +98,23 @@ export const api = {
 	updateUser: (id: string, patch: { password?: string; isAdmin?: boolean }) =>
 		request<ManagedUser>('PATCH', `/admin/users/${encodeURIComponent(id)}`, patch),
 	deleteUser: (id: string) => request<void>('DELETE', `/admin/users/${encodeURIComponent(id)}`),
+
+	/** Uploads images or files to attach to notes. */
+	async uploadAttachments(files: File[]): Promise<Attachment[]> {
+		const form = new FormData();
+		for (const file of files) form.append('files', file, file.name);
+		try {
+			return (await send<{ attachments: Attachment[] }>('POST', '/attachments', { body: form })).attachments;
+		} catch (err) {
+			if (err instanceof ApiError && err.status === 413 && !/Attachments can be up to/.test(err.message)) {
+				throw new ApiError(413, 'That file is bigger than this server accepts. Ask the admin to raise BODY_SIZE_LIMIT.');
+			}
+			throw err;
+		}
+	},
+	listAttachments: () => request<{ attachments: AttachmentUsage[] }>('GET', '/attachments'),
+	deleteAttachment: (id: string) => request<void>('DELETE', `/attachments/${encodeURIComponent(id)}`),
+	deleteUnusedAttachments: () => request<{ deleted: number; freedBytes: number }>('DELETE', '/attachments?unused=true'),
 
 	/** Uploads .md/.txt files and .zip archives; folders become notebooks. */
 	async importFiles(files: File[]): Promise<ImportResult> {

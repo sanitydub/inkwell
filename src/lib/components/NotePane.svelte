@@ -227,6 +227,7 @@
 						onchange={(content) => ws.edit({ content })}
 						onopenlink={(title) => ws.openByTitle(title)}
 						onopentag={(tag) => ws.showTag(tag)}
+						onupload={(files) => ws.uploadAttachments(files)}
 					/>
 				{/key}
 			</div>

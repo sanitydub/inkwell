@@ -13,7 +13,7 @@ WORKDIR /app
 ENV NODE_ENV=production \
     DATA_DIR=/data \
     PORT=3000 \
-    BODY_SIZE_LIMIT=10M
+    BODY_SIZE_LIMIT=25M
 COPY --from=build /app/build ./build
 COPY package.json ./
 RUN mkdir -p /data && chown node:node /data

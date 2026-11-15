@@ -43,9 +43,11 @@
 		onopentag?: (tag: string) => void;
 		/** Live view (formatted, Markdown hidden) or plain Markdown source. */
 		live?: boolean;
+		/** Uploads pasted or dropped files and returns Markdown to insert for each. */
+		onupload?: (files: File[]) => Promise<{ markdown: string }[]>;
 	}
 
-	let { value, readonly = false, onchange, titles, onopenlink, onopentag, live = true }: Props = $props();
+	let { value, readonly = false, onchange, titles, onopenlink, onopentag, live = true, onupload }: Props = $props();
 
 	// The live view can be switched on and off without recreating the editor.
 	const liveMode = new Compartment();
@@ -226,6 +228,40 @@
 		}
 	});
 
+	// Pasting or dropping files uploads them. A placeholder holds the spot while they upload, so
+	// typing can carry on; it's swapped for the real Markdown (or removed if the upload fails).
+	let uploadCount = 0;
+	async function insertUploads(view: EditorView, files: File[], at: number) {
+		if (!onupload || view.state.readOnly || !files.length) return;
+		const token = `upload-${Date.now()}-${uploadCount++}`;
+		const label = files.length === 1 ? files[0].name.replace(/[[\]]/g, '') : `${files.length} files`;
+		const placeholder = `[Uploading ${label}…](${token})`;
+		view.dispatch({ changes: { from: at, insert: placeholder }, selection: { anchor: at + placeholder.length }, userEvent: 'input.paste' });
+		const results = await onupload(files);
+		const start = view.state.doc.toString().indexOf(placeholder);
+		if (start < 0) return;
+		const insert = results.map((r) => r.markdown).join('\n');
+		view.dispatch({ changes: { from: start, to: start + placeholder.length, insert }, userEvent: 'input.paste' });
+	}
+
+	const fileDrops = EditorView.domEventHandlers({
+		paste(event, view) {
+			const files = [...(event.clipboardData?.files ?? [])];
+			if (!files.length || !onupload) return false;
+			event.preventDefault();
+			insertUploads(view, files, view.state.selection.main.head);
+			return true;
+		},
+		drop(event, view) {
+			const files = [...(event.dataTransfer?.files ?? [])];
+			if (!files.length || !onupload) return false;
+			event.preventDefault();
+			const at = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+			insertUploads(view, files, at);
+			return true;
+		}
+	});
+
 	// Suggests note titles after "[[", and closes the link when one is picked.
 	function linkCompletions(context: CompletionContext): CompletionResult | null {
 		const typed = context.matchBefore(/\[\[[^[\]|\n]*/);
@@ -329,6 +365,7 @@
 					inlineStyles,
 					codeBlockFont,
 					followLinkOnModClick,
+					fileDrops,
 					autocompletion({ override: [linkCompletions], icons: false }),
 					keymap.of([...formatKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
 					placeholder('Start writing. Markdown works here.'),

@@ -2,6 +2,10 @@ import { transaction } from './db';
 import { findOrCreateNotebook } from './notebooks';
 import { insertImportedNote, MAX_CONTENT, MAX_TITLE } from './notes';
 import { docxToMarkdown, DocxError } from './docx';
+import { storeAttachment } from './attachments';
+import { isHttpError } from '@sveltejs/kit';
+import { posix } from 'node:path';
+import type { Attachment } from '#lib/types.ts';
 
 export interface ImportFile {
 	/** Path relative to the import root, e.g. "Work/Ideas.md". */
@@ -14,6 +18,8 @@ export interface ImportResult {
 	imported: number;
 	/** Notebooks that didn't exist before the import. */
 	notebooksCreated: string[];
+	/** Images and files stored as attachments because notes link to them. */
+	attachments: number;
 	/** Files that weren't imported, with the reason in brackets. */
 	skipped: string[];
 }
@@ -87,13 +93,55 @@ export function importNotes(userId: string, files: ImportFile[], alreadySkipped:
 	const skipped = [...alreadySkipped];
 	const notes: { title: string; content: string; notebook: string | null; meta: FrontMatter; modified: Date }[] = [];
 
+	// Other files (images, PDFs, …) become attachments when a note links to them.
+	const assets = new Map<string, ImportFile>();
+	const assetsByName = new Map<string, ImportFile>();
 	for (const file of files) {
-		if (isJunk(file.path)) continue;
-		const isWord = WORD_FILE.test(file.path);
-		if (!isWord && !NOTE_FILE.test(file.path)) {
-			skipped.push(`${file.path} (not a Markdown, text or Word file)`);
-			continue;
+		if (isJunk(file.path) || WORD_FILE.test(file.path) || NOTE_FILE.test(file.path)) continue;
+		assets.set(file.path.toLowerCase(), file);
+		const base = posix.basename(file.path).toLowerCase();
+		if (!assetsByName.has(base)) assetsByName.set(base, file);
+	}
+	const stored = new Map<string, Attachment | null>();
+	const attach = (file: ImportFile): Attachment | null => {
+		const key = file.path.toLowerCase();
+		if (!stored.has(key)) {
+			try {
+				stored.set(key, storeAttachment(userId, posix.basename(file.path), file.data));
+			} catch (err) {
+				if (!isHttpError(err, 413)) throw err;
+				stored.set(key, null);
+				skipped.push(`${file.path} (too big to attach)`);
+			}
 		}
+		return stored.get(key) ?? null;
+	};
+	/** Points relative links and Obsidian ![[embeds]] at files in the import to new attachments. */
+	const linkAttachments = (markdown: string, folder: string) =>
+		markdown
+			.replace(/(!?)\[([^\]\n]*)\]\(([^)\s]+)\)/g, (whole, bang: string, text: string, target: string) => {
+				if (/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(target)) return whole;
+				let decoded = target;
+				try {
+					decoded = decodeURIComponent(target);
+				} catch {
+					/* keep as written */
+				}
+				const file = assets.get(posix.normalize(posix.join(folder, decoded)).toLowerCase());
+				const attachment = file && attach(file);
+				return attachment ? `${bang}[${text}](${attachment.url})` : whole;
+			})
+			.replace(/!\[\[([^\]|#\n]+)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/g, (whole, target: string) => {
+				const file =
+					assets.get(posix.normalize(posix.join(folder, target.trim())).toLowerCase()) ??
+					assetsByName.get(posix.basename(target.trim()).toLowerCase());
+				const attachment = file && attach(file);
+				return attachment ? attachment.markdown : whole;
+			});
+
+	for (const file of files) {
+		if (isJunk(file.path) || assets.has(file.path.toLowerCase())) continue;
+		const isWord = WORD_FILE.test(file.path);
 
 		let meta: FrontMatter = {};
 		let body: string;
@@ -121,6 +169,7 @@ export function importNotes(userId: string, files: ImportFile[], alreadySkipped:
 		const parts = file.path.split('/');
 		const fileName = parts.pop()!.replace(isWord ? WORD_FILE : NOTE_FILE, '');
 		const folders = parts.filter(Boolean).join(' / ');
+		if (assets.size) body = linkAttachments(body, parts.join('/'));
 		notes.push({
 			title: (meta.title ?? fileName).slice(0, MAX_TITLE),
 			content: body,
@@ -128,6 +177,10 @@ export function importNotes(userId: string, files: ImportFile[], alreadySkipped:
 			meta,
 			modified: file.modified
 		});
+	}
+
+	for (const file of assets.values()) {
+		if (!stored.has(file.path.toLowerCase())) skipped.push(`${file.path} (no note links to it)`);
 	}
 
 	const notebooksCreated: string[] = [];
@@ -157,5 +210,5 @@ export function importNotes(userId: string, files: ImportFile[], alreadySkipped:
 		}
 	});
 
-	return { imported: notes.length, notebooksCreated, skipped };
+	return { imported: notes.length, notebooksCreated, attachments: [...stored.values()].filter(Boolean).length, skipped };
 }
