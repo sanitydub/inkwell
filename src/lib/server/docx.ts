@@ -26,6 +26,8 @@ interface Segment {
 	bold: boolean;
 	italic: boolean;
 	strike: boolean;
+	underline: boolean;
+	highlight: boolean;
 	href?: string;
 }
 
@@ -99,6 +101,8 @@ function collect(el: XmlElement, ctx: Context, out: Segment[], href?: string) {
 					bold: isOn(child(rPr, 'w:b')),
 					italic: isOn(child(rPr, 'w:i')),
 					strike: isOn(child(rPr, 'w:strike')) || isOn(child(rPr, 'w:dstrike')),
+					underline: isOn(child(rPr, 'w:u')),
+					highlight: isOn(child(rPr, 'w:highlight')),
 					href
 				});
 			}
@@ -112,14 +116,15 @@ function collect(el: XmlElement, ctx: Context, out: Segment[], href?: string) {
 	}
 }
 
-/** Escapes characters that would otherwise turn into Markdown formatting. */
-const escapeInline = (text: string) => text.replace(/([\\`*_<~])/g, '\\$1');
+/** Escapes characters that would otherwise turn into Markdown formatting (including "==" highlights). */
+const escapeInline = (text: string) => text.replace(/([\\`*_<~])/g, '\\$1').replace(/=(?==)/g, '\\=');
 
 function render(segments: Segment[]): string {
 	const merged: Segment[] = [];
 	for (const s of segments) {
 		const last = merged.at(-1);
-		if (last && last.bold === s.bold && last.italic === s.italic && last.strike === s.strike && last.href === s.href) {
+		const same = (k: 'bold' | 'italic' | 'strike' | 'underline' | 'highlight') => last?.[k] === s[k];
+		if (last && same('bold') && same('italic') && same('strike') && same('underline') && same('highlight') && last.href === s.href) {
 			last.text += s.text;
 		} else merged.push({ ...s });
 	}
@@ -131,6 +136,8 @@ function render(segments: Segment[]): string {
 			const lead = text.slice(0, text.indexOf(inner));
 			const trail = text.slice(text.indexOf(inner) + inner.length);
 			let out = inner;
+			if (s.underline && !s.href) out = `<u>${out}</u>`;
+			if (s.highlight) out = `==${out}==`;
 			if (s.strike) out = `~~${out}~~`;
 			if (s.italic) out = `*${out}*`;
 			if (s.bold) out = `**${out}**`;

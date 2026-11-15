@@ -345,11 +345,9 @@
 	}
 	h1 {
 		margin: 1.25rem 0 0.5rem;
-		font-family: var(--font-serif);
-		font-optical-sizing: auto;
-		font-size: clamp(2rem, 1.4rem + 1.6vw, 2.6rem);
-		font-weight: 480;
-		letter-spacing: -0.015em;
+		font-size: clamp(1.7rem, 1.2rem + 1.3vw, 2.3rem);
+		font-weight: 650;
+		letter-spacing: -0.02em;
 	}
 	section {
 		padding: 1.75rem 0;

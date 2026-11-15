@@ -9,6 +9,7 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 | <img src="docs/screenshots/desktop-dark.png" alt="Inkwell in dark mode, showing a note in Read view with its Linked from list open"> | <img src="docs/screenshots/mobile-list.png" alt="The note list on a phone" width="150"> <img src="docs/screenshots/mobile-note.png" alt="A note open on a phone, in dark mode" width="150"> |
 
 - Markdown editor (CodeMirror) with Write, Split and Read layouts; tick `- [ ]` tasks right in the rendered note
+- Formatting toolbar and shortcuts: bold, italic, underline, strikethrough, highlight, headings, bulleted/numbered/task lists, quotes, code, links and tables
 - Full-text search with prefix matching
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
 - `[[Wiki-links]]` between notes with title suggestions as you type, a “Linked from” list of backlinks on every note, and an offer to update links when you rename a note
@@ -71,6 +72,24 @@ Set `ADDRESS_HEADER=x-forwarded-for` (and `XFF_DEPTH=1` for a single proxy) so t
 ### Rate limits
 
 To slow down password guessing, sign-in is blocked for 15 minutes after 10 failed attempts for one username or 20 from one IP address, and an IP address can create at most 5 accounts an hour. Counters are kept in memory and reset when the server restarts.
+
+## Formatting
+
+Notes are Markdown, and the toolbar above the editor writes it for you. Click a button again to remove the formatting.
+
+| Format | Shortcut | Markdown |
+| --- | --- | --- |
+| Bold | Ctrl+B | `**text**` |
+| Italic | Ctrl+I | `*text*` |
+| Underline | Ctrl+U | `<u>text</u>` |
+| Strikethrough | Ctrl+Shift+X | `~~text~~` |
+| Highlight | Ctrl+Shift+H | `==text==` |
+| Code | Ctrl+E | `` `text` `` (a fenced block for several lines) |
+| Heading 1–3 | Ctrl+Alt+1 / 2 / 3 | `#`, `##`, `###` |
+| Bulleted / numbered / task list | Ctrl+Shift+8 / 7 / 9 | `- `, `1. `, `- [ ] ` |
+| Link | Ctrl+K (in the editor) | `[text](https://…)` |
+
+On a Mac, use ⌘ instead of Ctrl. Quotes and tables are on the toolbar. Underline and highlight use the same syntax as Obsidian, so notes move between the two cleanly; Word imports keep both.
 
 ## Accounts
 

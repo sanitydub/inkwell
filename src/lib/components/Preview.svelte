@@ -42,10 +42,9 @@
 
 <style>
 	.prose {
-		font-family: var(--font-serif);
-		font-size: 1.175rem;
+		font-family: var(--font-ui);
+		font-size: 1.0625rem;
 		line-height: 1.65;
-		font-optical-sizing: auto;
 		max-width: 38rem;
 		padding-bottom: 30vh;
 		overflow-wrap: break-word;
@@ -169,6 +168,16 @@
 	}
 	.prose :global(button.tag:hover) {
 		background: var(--selection);
+	}
+	.prose :global(mark) {
+		padding: 0.05em 0.15em;
+		border-radius: 3px;
+		background: var(--mark);
+		color: inherit;
+	}
+	.prose :global(u) {
+		text-decoration-thickness: 1px;
+		text-underline-offset: 0.15em;
 	}
 	.prose :global(button.wikilink) {
 		padding: 0;

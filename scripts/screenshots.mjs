@@ -75,6 +75,8 @@ const NOTES = [
 			'',
 			'Move the **tomatoes** to the south bed this year and try `companion planting` with basil. Quantities are in the [[Seed order]]. #garden/veg',
 			'',
+			'==Order seeds before March==, or the <u>Sungold</u> tomatoes sell out.',
+			'',
 			'> Water deeply, not daily.',
 			'',
 			'## This weekend',

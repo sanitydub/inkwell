@@ -28,6 +28,7 @@
 	import { tags as t } from '@lezer/highlight';
 	import { tagRegExp } from '#lib/tags.ts';
 	import { linkRegExp, linkTarget } from '#lib/links.ts';
+	import { applyFormat, formatKeymap, type FormatCommand } from '#lib/editor-format.ts';
 
 	interface Props {
 		value: string;
@@ -43,6 +44,13 @@
 
 	let host: HTMLDivElement;
 	let view: EditorView | undefined;
+
+	/** Applies a toolbar formatting command and keeps the cursor in the editor. */
+	export function format(command: FormatCommand) {
+		if (!view) return;
+		applyFormat(view, command);
+		view.focus();
+	}
 
 	export function focus() {
 		view?.focus();
@@ -124,6 +132,28 @@
 		{ decorations: (plugin) => plugin.decorations }
 	);
 
+	// ==Highlights== and <u>underlines</u> look like what they'll become.
+	const highlightMark = Decoration.mark({ class: 'cm-md-highlight' });
+	const underlineMark = Decoration.mark({ class: 'cm-md-underline' });
+	const inlineStyleMatcher = new MatchDecorator({
+		regexp: /==(?!=)(?=\S)(?:.*?\S)==(?!=)|<u>.+?<\/u>/g,
+		decorate: (add, from, to, match, view) => {
+			if (!inCodeOrLink(view, from, false)) add(from, to, match[0].startsWith('==') ? highlightMark : underlineMark);
+		}
+	});
+	const inlineStyles = ViewPlugin.fromClass(
+		class {
+			decorations: DecorationSet;
+			constructor(view: EditorView) {
+				this.decorations = inlineStyleMatcher.createDeco(view);
+			}
+			update(update: ViewUpdate) {
+				this.decorations = inlineStyleMatcher.updateDeco(update, this.decorations);
+			}
+		},
+		{ decorations: (plugin) => plugin.decorations }
+	);
+
 	const followLinkOnModClick = EditorView.domEventHandlers({
 		mousedown(event, view) {
 			if (!(event.metaKey || event.ctrlKey) || !onopenlink) return false;
@@ -166,6 +196,8 @@
 	}
 
 	const theme = EditorView.theme({
+		'.cm-md-highlight': { backgroundColor: 'var(--mark)', borderRadius: '3px' },
+		'.cm-md-underline': { textDecoration: 'underline', textUnderlineOffset: '0.2em' },
 		'.cm-wikilink': {
 			color: 'var(--accent)',
 			textDecoration: 'underline',
@@ -239,9 +271,10 @@
 					syntaxHighlighting(highlight),
 					tagHighlighter,
 					wikiLinkHighlighter,
+					inlineStyles,
 					followLinkOnModClick,
 					autocompletion({ override: [linkCompletions], icons: false }),
-					keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
+					keymap.of([...formatKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
 					placeholder('Start writing. Markdown works here.'),
 					EditorState.readOnly.of(readonly),
 					EditorView.editable.of(!readonly),

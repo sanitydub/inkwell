@@ -23,6 +23,8 @@
 
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape' && drawerOpen) drawerOpen = false;
+			// The editor handles its own shortcuts (Ctrl+K inserts a link there).
+			if (e.defaultPrevented) return;
 			if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
 			const key = e.key.toLowerCase();
 			if (key === 'k') {

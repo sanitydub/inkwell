@@ -3,6 +3,7 @@
 	import { ChevronDown, ChevronLeft, Download, Link2, Notebook as NotebookIcon, Pin, PinOff, RotateCcw, Trash2 } from '@lucide/svelte';
 	import Editor from './Editor.svelte';
 	import Preview from './Preview.svelte';
+	import FormatToolbar from './FormatToolbar.svelte';
 	import { longDate } from '#lib/format.ts';
 	import { extractTags } from '#lib/tags.ts';
 	import { noteToMarkdown, safeFileName } from '#lib/note-file.ts';
@@ -230,15 +231,18 @@
 			{#if !note.trashed}
 				<!-- Kept mounted while reading so undo history survives switching layouts. -->
 				<div class="write" hidden={shown === 'read'}>
-					{#key note.id}
-						<Editor
-							bind:this={editor}
-							value={note.content}
-							titles={linkTitles}
-							onchange={(content) => ws.edit({ content })}
-							onopenlink={(title) => ws.openByTitle(title)}
-						/>
-					{/key}
+					<FormatToolbar onformat={(command) => editor?.format(command)} />
+					<div class="editor-area">
+						{#key note.id}
+							<Editor
+								bind:this={editor}
+								value={note.content}
+								titles={linkTitles}
+								onchange={(content) => ws.edit({ content })}
+								onopenlink={(title) => ws.openByTitle(title)}
+							/>
+						{/key}
+					</div>
 				</div>
 			{/if}
 			{#if shown !== 'write'}
@@ -351,12 +355,11 @@
 		border: 0;
 		outline: none;
 		background: transparent;
-		font-family: var(--font-serif);
-		font-optical-sizing: auto;
-		font-size: clamp(1.85rem, 1.2rem + 1.6vw, 2.6rem);
-		font-weight: 480;
+		font-family: var(--font-ui);
+		font-size: clamp(1.7rem, 1.2rem + 1.3vw, 2.3rem);
+		font-weight: 650;
 		line-height: 1.15;
-		letter-spacing: -0.015em;
+		letter-spacing: -0.02em;
 		text-overflow: ellipsis;
 	}
 	.title::placeholder {
@@ -497,6 +500,12 @@
 	}
 	.write {
 		min-height: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.editor-area {
+		flex: 1;
+		min-height: 0;
 	}
 	.write[hidden] {
 		display: none;
@@ -523,9 +532,7 @@
 	}
 	.placeholder p {
 		margin: 0 0 1rem;
-		font-family: var(--font-serif);
-		font-size: 1.25rem;
-		font-style: italic;
+		font-size: 1.05rem;
 	}
 
 	@media (max-width: 760px) {

@@ -6,6 +6,29 @@ import { findTasks } from './tasks';
 
 const marked = new Marked({ gfm: true, breaks: false });
 
+// ==Highlighted text== (Obsidian's syntax) renders as <mark>. Underline needs no extension:
+// it's written as <u>…</u>, which Markdown passes through as HTML.
+marked.use({
+	extensions: [
+		{
+			name: 'highlight',
+			level: 'inline',
+			start(src: string) {
+				const i = src.indexOf('==');
+				return i >= 0 ? i : undefined;
+			},
+			tokenizer(src: string) {
+				const match = /^==(?!=)(?=\S)([\s\S]*?\S)==(?!=)/.exec(src);
+				if (!match) return undefined;
+				return { type: 'highlight', raw: match[0], text: match[1], tokens: this.lexer.inlineTokens(match[1]) };
+			},
+			renderer(token) {
+				return `<mark>${this.parser.parseInline(token.tokens ?? [])}</mark>`;
+			}
+		}
+	]
+});
+
 // Mark the checkboxes Markdown task lists produce, so they can't be confused with <input>s in raw HTML.
 marked.use({
 	renderer: {
