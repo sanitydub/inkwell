@@ -17,7 +17,7 @@
 	import HistoryPanel from './HistoryPanel.svelte';
 	import { longDate } from '#lib/format.ts';
 	import { extractTags } from '#lib/tags.ts';
-	import { noteToMarkdown, safeFileName } from '#lib/note-file.ts';
+	import { preferences } from '#lib/preferences.svelte.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
 	interface Props {
@@ -28,8 +28,7 @@
 	let { ws, onback }: Props = $props();
 
 	// One live view: you edit the formatted note. "Show Markdown" switches to plain source.
-	const SOURCE_KEY = 'inkwell-show-markdown';
-	let showMarkdown = $state(savedShowMarkdown());
+	const showMarkdown = $derived(preferences.showMarkdown);
 	let editor = $state<ReturnType<typeof Editor>>();
 	let titleInput = $state<HTMLInputElement>();
 
@@ -40,12 +39,10 @@
 
 	// "Linked from" list: closes on outside click, Escape, or opening another note.
 	let showBacklinks = $state(false);
-	let showHistory = $state(false);
 	let backlinksBox = $state<HTMLElement>();
 	$effect(() => {
 		note?.id;
 		showBacklinks = false;
-		showHistory = false;
 	});
 
 	function closeBacklinksOnOutsideClick(e: MouseEvent) {
@@ -76,21 +73,8 @@
 		}
 	});
 
-	function savedShowMarkdown(): boolean {
-		try {
-			return localStorage.getItem(SOURCE_KEY) === 'true';
-		} catch {
-			return false;
-		}
-	}
-
 	function toggleShowMarkdown() {
-		showMarkdown = !showMarkdown;
-		try {
-			localStorage.setItem(SOURCE_KEY, String(showMarkdown));
-		} catch {
-			/* storage unavailable */
-		}
+		preferences.toggleShowMarkdown();
 		editor?.focus();
 	}
 
@@ -99,15 +83,6 @@
 			e.preventDefault();
 			tick().then(() => editor?.focus());
 		}
-	}
-
-	function download() {
-		if (!note) return;
-		const file = new Blob([noteToMarkdown(note)], { type: 'text/markdown;charset=utf-8' });
-		const url = URL.createObjectURL(file);
-		const a = Object.assign(document.createElement('a'), { href: url, download: `${safeFileName(note.title)}.md` });
-		a.click();
-		setTimeout(() => URL.revokeObjectURL(url), 1000);
 	}
 
 	function confirmDelete() {
@@ -150,14 +125,11 @@
 						class="icon-btn"
 						aria-label="History"
 						title="History: earlier versions of this note"
-						onclick={async () => {
-							await ws.flush();
-							showHistory = true;
-						}}
+						onclick={() => ws.openHistory()}
 					>
 						<History size={17} />
 					</button>
-					<button class="icon-btn" aria-label="Download as Markdown" title="Download as Markdown" onclick={download}>
+					<button class="icon-btn" aria-label="Download as Markdown" title="Download as Markdown" onclick={() => ws.downloadCurrent()}>
 						<Download size={17} />
 					</button>
 					<button class="icon-btn" aria-label="Move to trash" title="Move to trash" onclick={() => ws.moveToTrash()}>
@@ -257,8 +229,8 @@
 				{/key}
 			</div>
 		</div>
-		{#if showHistory}
-			<HistoryPanel {ws} onclose={() => (showHistory = false)} />
+		{#if ws.historyOpen}
+			<HistoryPanel {ws} onclose={() => (ws.historyOpen = false)} />
 		{/if}
 	{:else}
 		<div class="placeholder">

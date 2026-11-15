@@ -11,6 +11,7 @@ A simple note-taking app you host yourself. Write in a live view that formats as
 - One live view: you edit the formatted note directly, like Obsidian's Live Preview. Markdown symbols show only on the line you're editing, checkboxes tick with a click, and links and tags open with a click. **Show Markdown** on the toolbar switches to plain source.
 - Formatting toolbar and shortcuts: bold, italic, underline, strikethrough, highlight, headings, bulleted/numbered/task lists, quotes, code, links and tables
 - Full-text search with prefix matching
+- Quick switcher (Ctrl/⌘+P) to jump to any note by typing part of its title, and a command palette (Ctrl/⌘+Shift+P) for everything else
 - Images and file attachments: paste or drop them into a note; images show in the note, other files open with a click
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
 - `[[Wiki-links]]` between notes with title suggestions as you type, a “Linked from” list of backlinks on every note, and an offer to update links when you rename a note
@@ -93,6 +94,17 @@ Notes are Markdown, and the toolbar above the editor writes it for you. Click a 
 | Link | Ctrl+K (in the editor) | `[text](https://…)` |
 
 Each line break shows as a new line, as in Obsidian; leave a blank line to start a new paragraph. On a Mac, use ⌘ instead of Ctrl. Quotes and tables are on the toolbar. Underline and highlight use the same syntax as Obsidian, so notes move between the two cleanly; Word imports keep both.
+
+## Keyboard shortcuts
+
+| Shortcut | What it does |
+| --- | --- |
+| Ctrl+P | Quick switcher: type a few letters of a title, in order, to find a note. With nothing typed it lists recently edited notes. If no note matches, Enter creates one with that title. |
+| Ctrl+Shift+P | Command palette: new note, pin, trash or restore, history, download, Show Markdown, go to a view or notebook, theme, import, export, Settings, sign out |
+| Ctrl+K | Search notes (inserts a link when you're in the editor) |
+| Ctrl+S | Save now (notes also save as you type) |
+
+On a Mac, use ⌘ instead of Ctrl. Firefox keeps Ctrl+Shift+P for private windows, so there (or anywhere) press Ctrl+P and type `>` to get the commands instead.
 
 ## Accounts
 

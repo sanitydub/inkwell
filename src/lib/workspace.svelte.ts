@@ -1,5 +1,6 @@
 import { api, ApiError, type ImportResult } from './api';
 import { snippetFrom } from './snippet';
+import { noteToMarkdown, safeFileName } from './note-file';
 import { isLinkableTitle, normalizeTitle } from './links';
 import type { Backlink, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, View } from './types';
 
@@ -44,6 +45,8 @@ export class Workspace {
 	backlinks = $state<Backlink[]>([]);
 	saveState = $state<SaveState>('idle');
 	message = $state<string | null>(null);
+	/** Whether the History panel is open for the open note. */
+	historyOpen = $state(false);
 	/** Set when a note was just created, so the editor can put the cursor in its title. */
 	freshNoteId = $state<string | null>(null);
 
@@ -130,6 +133,7 @@ export class Workspace {
 		this.current = note;
 		this.saveState = 'idle';
 		this.backlinks = [];
+		this.historyOpen = false;
 		this.#savedTitle = note.title;
 		this.#loadBacklinks();
 	}
@@ -374,6 +378,46 @@ export class Workspace {
 			this.#fail(err);
 			return false;
 		}
+	}
+
+	/** Saves pending edits, then opens the History panel. */
+	async openHistory() {
+		if (!this.current || this.current.trashed) return;
+		await this.flush();
+		this.historyOpen = true;
+	}
+
+	/** Downloads the open note as a .md file. */
+	downloadCurrent() {
+		const note = this.current;
+		if (!note) return;
+		const file = new Blob([noteToMarkdown(note)], { type: 'text/markdown;charset=utf-8' });
+		const url = URL.createObjectURL(file);
+		const a = Object.assign(document.createElement('a'), { href: url, download: `${safeFileName(note.title)}.md` });
+		a.click();
+		setTimeout(() => URL.revokeObjectURL(url), 1000);
+	}
+
+	/** Downloads everything as a zip. The server sends it as an attachment, so the page stays put. */
+	async exportAll() {
+		await this.flush();
+		location.href = '/api/export';
+	}
+
+	/** Asks for files to import (Markdown, Word or zip) and imports them. */
+	chooseImportFiles() {
+		if (this.importing) return;
+		const input = Object.assign(document.createElement('input'), {
+			type: 'file',
+			multiple: true,
+			accept:
+				'.md,.markdown,.txt,.docx,.zip,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip'
+		});
+		input.addEventListener('change', () => {
+			const files = [...(input.files ?? [])];
+			if (files.length) this.importFiles(files);
+		});
+		input.click();
 	}
 
 	togglePin() {

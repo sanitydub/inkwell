@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { tick } from 'svelte';
 	import { FileArchive, FileText, FileUp, Hash, LogOut, Monitor, Moon, Notebook as NotebookIcon, Pin, Plus, Settings, Sun, Trash2 } from '@lucide/svelte';
 	import type { User, View } from '#lib/types.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
+	import { preferences, THEME_LABELS } from '#lib/preferences.svelte.ts';
 
 	interface Props {
 		ws: Workspace;
@@ -60,47 +61,6 @@
 		}
 	}
 
-	let fileInput = $state<HTMLInputElement>();
-
-	// The server sends the zip as an attachment, so the page stays put while it downloads.
-	async function exportAll() {
-		await ws.flush();
-		location.href = '/api/export';
-	}
-
-	// ---- Theme ----------------------------------------------------------------
-
-	type Theme = 'system' | 'light' | 'dark';
-	const THEME_KEY = 'inkwell-theme';
-	const nextTheme: Record<Theme, Theme> = { system: 'light', light: 'dark', dark: 'system' };
-	const themeLabel: Record<Theme, string> = {
-		system: 'Theme: match system',
-		light: 'Theme: light',
-		dark: 'Theme: dark'
-	};
-	let theme = $state<Theme>('system');
-
-	onMount(() => {
-		try {
-			const saved = localStorage.getItem(THEME_KEY);
-			if (saved === 'light' || saved === 'dark') theme = saved;
-		} catch {
-			/* storage unavailable */
-		}
-	});
-
-	function cycleTheme() {
-		theme = nextTheme[theme];
-		const root = document.documentElement;
-		if (theme === 'system') delete root.dataset.theme;
-		else root.dataset.theme = theme;
-		try {
-			if (theme === 'system') localStorage.removeItem(THEME_KEY);
-			else localStorage.setItem(THEME_KEY, theme);
-		} catch {
-			/* storage unavailable */
-		}
-	}
 </script>
 
 <nav class="sidebar" aria-label="Notes">
@@ -200,10 +160,15 @@
 			<span>{user.username}</span>
 		</a>
 		<div class="tools">
-			<button class="icon-btn" onclick={cycleTheme} aria-label={themeLabel[theme]} title={themeLabel[theme]}>
-				{#if theme === 'light'}
+			<button
+				class="icon-btn"
+				onclick={() => preferences.cycleTheme()}
+				aria-label={THEME_LABELS[preferences.theme]}
+				title={THEME_LABELS[preferences.theme]}
+			>
+				{#if preferences.theme === 'light'}
 					<Sun size={16} />
-				{:else if theme === 'dark'}
+				{:else if preferences.theme === 'dark'}
 					<Moon size={16} />
 				{:else}
 					<Monitor size={16} />
@@ -211,25 +176,14 @@
 			</button>
 			<button
 				class="icon-btn"
-				onclick={() => fileInput?.click()}
+				onclick={() => ws.chooseImportFiles()}
 				disabled={ws.importing}
 				aria-label="Import notes"
 				title="Import Markdown, Word (.docx) or zip files"
 			>
 				<FileUp size={16} />
 			</button>
-			<input
-				bind:this={fileInput}
-				type="file"
-				multiple
-				hidden
-				accept=".md,.markdown,.txt,.docx,.zip,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip"
-				onchange={(e) => {
-					ws.importFiles([...(e.currentTarget.files ?? [])]);
-					e.currentTarget.value = '';
-				}}
-			/>
-			<button class="icon-btn" onclick={exportAll} aria-label="Export all notes" title="Export all notes as a zip">
+			<button class="icon-btn" onclick={() => ws.exportAll()} aria-label="Export all notes" title="Export all notes as a zip">
 				<FileArchive size={16} />
 			</button>
 			<button class="icon-btn" onclick={onsignout} aria-label="Sign out" title="Sign out">

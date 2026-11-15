@@ -308,7 +308,11 @@ export const formatKeymap: KeyBinding[] = Object.entries(SHORTCUTS).map(([comman
 /** A shortcut as people read it on this platform, e.g. "Ctrl+Shift+8" or "⌘⇧8". */
 export function shortcutLabel(command: FormatCommand): string | null {
 	const key = SHORTCUTS[command];
-	if (!key) return null;
+	return key ? keyLabel(key) : null;
+}
+
+/** A CodeMirror-style key like "Mod-Shift-p" as people read it: "Ctrl+Shift+P", or "⌘⇧P" on a Mac. */
+export function keyLabel(key: string): string {
 	const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 	const parts = key.split('-');
 	const last = parts.pop()!.toUpperCase();

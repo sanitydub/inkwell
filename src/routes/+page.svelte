@@ -7,14 +7,25 @@
 	import Sidebar from '#lib/components/Sidebar.svelte';
 	import NoteList from '#lib/components/NoteList.svelte';
 	import NotePane from '#lib/components/NotePane.svelte';
+	import CommandPalette from '#lib/components/CommandPalette.svelte';
+	import { preferences } from '#lib/preferences.svelte.ts';
 
 	let { data } = $props();
 
 	const ws = new Workspace();
 	let drawerOpen = $state(false);
 	let searchInput = $state<HTMLInputElement>();
+	/** Which palette is open: the note switcher (Ctrl/Cmd+P) or commands (Ctrl/Cmd+Shift+P). */
+	let palette = $state<'notes' | 'commands' | null>(null);
+
+	function focusSearch() {
+		drawerOpen = false;
+		searchInput?.focus();
+		searchInput?.select();
+	}
 
 	onMount(() => {
+		preferences.load();
 		ws.refresh();
 		ws.refreshSidebar();
 		ws.refreshTitles();
@@ -27,10 +38,13 @@
 			if (e.defaultPrevented) return;
 			if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
 			const key = e.key.toLowerCase();
-			if (key === 'k') {
+			if (key === 'p') {
+				// Also stops the browser's print dialog.
 				e.preventDefault();
-				searchInput?.focus();
-				searchInput?.select();
+				if (!palette) palette = e.shiftKey ? 'commands' : 'notes';
+			} else if (key === 'k') {
+				e.preventDefault();
+				focusSearch();
 			} else if (key === 's') {
 				e.preventDefault();
 				ws.flush();
@@ -90,6 +104,16 @@
 		<NotePane {ws} onback={() => ws.close()} />
 	</main>
 </div>
+
+{#if palette}
+	<CommandPalette
+		{ws}
+		commands={palette === 'commands'}
+		onclose={() => (palette = null)}
+		onsearch={focusSearch}
+		onsignout={signOut}
+	/>
+{/if}
 
 <div class="toasts">
 	{#if ws.renameOffer}
