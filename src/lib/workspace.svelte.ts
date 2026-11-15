@@ -355,6 +355,27 @@ export class Workspace {
 		}
 	}
 
+	/** Puts an earlier version of the open note back. Returns true if it worked. */
+	async restoreVersion(versionId: string): Promise<boolean> {
+		const note = this.current;
+		if (!note) return false;
+		await this.flush();
+		try {
+			const { note: saved } = await api.restoreVersion(note.id, versionId);
+			if (this.current?.id !== note.id) return true;
+			// The editor notices the outside change and shows the restored text.
+			Object.assign(this.current, { title: saved.title, content: saved.content, tags: saved.tags, updatedAt: saved.updatedAt });
+			this.#savedTitle = saved.title;
+			this.saveState = 'saved';
+			await Promise.all([this.refresh(), this.refreshSidebar(), this.refreshTitles(), this.#loadBacklinks()]);
+			this.message = 'Restored. The text it replaced is kept in History.';
+			return true;
+		} catch (err) {
+			this.#fail(err);
+			return false;
+		}
+	}
+
 	togglePin() {
 		return this.#patch({ pinned: !this.current?.pinned });
 	}

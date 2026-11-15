@@ -20,6 +20,8 @@
 	--danger-soft: rgb(157 48 39 / 0.08);
 	--code-bg: #e5eae3;
 	--mark: #ece08f;
+	--diff-add: rgb(47 107 69 / 0.14);
+	--diff-del: rgb(157 48 39 / 0.12);
 
 	--syn-keyword: #6b3a8c;
 	--syn-string: #2f6b45;
@@ -55,6 +57,8 @@
 		--danger-soft: rgb(240 143 132 / 0.1);
 		--code-bg: #222326;
 		--mark: #5c5520;
+		--diff-add: rgb(147 207 164 / 0.16);
+		--diff-del: rgb(240 143 132 / 0.15);
 		--syn-keyword: #cfa3ef;
 		--syn-string: #93cfa4;
 		--syn-number: #e7b471;
@@ -80,6 +84,8 @@
 	--danger-soft: rgb(240 143 132 / 0.1);
 	--code-bg: #222326;
 	--mark: #5c5520;
+	--diff-add: rgb(147 207 164 / 0.16);
+	--diff-del: rgb(240 143 132 / 0.15);
 	--syn-keyword: #cfa3ef;
 	--syn-string: #93cfa4;
 	--syn-number: #e7b471;

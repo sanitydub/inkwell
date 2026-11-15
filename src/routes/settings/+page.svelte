@@ -295,7 +295,9 @@
 								<td class="file"><a href={a.url} target="_blank" rel="noopener">{a.name}</a></td>
 								<td class="num">{formatBytes(a.size)}</td>
 								<td class="used" class:muted={!a.usedBy.length}>
-									{a.usedBy.length ? a.usedBy.map((n) => n.title.trim() || 'Untitled').join(', ') : 'Not used'}
+									{a.usedBy.length
+										? a.usedBy.map((n) => (n.title.trim() || 'Untitled') + (n.history ? ' (history)' : '')).join(', ')
+										: 'Not used'}
 								</td>
 								<td class="actions"><button class="btn danger" onclick={() => deleteOneAttachment(a)}>Delete</button></td>
 							</tr>

@@ -14,6 +14,7 @@ A simple note-taking app you host yourself. Write in a live view that formats as
 - Images and file attachments: paste or drop them into a note; images show in the note, other files open with a click
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
 - `[[Wiki-links]]` between notes with title suggestions as you type, a “Linked from” list of backlinks on every note, and an offer to update links when you rename a note
+- Version history: earlier versions of each note are kept as you edit; compare any of them with the note now and restore it (restoring can itself be undone)
 - Pin notes, move them to the trash, restore them, or delete them for good
 - Download any note as a `.md` file, or export everything as a zip (one folder per notebook)
 - Import Markdown and Word (.docx) files, or a zip of them, such as an Obsidian vault, a Joplin Markdown export, or an Inkwell export
@@ -95,7 +96,13 @@ Each line break shows as a new line, as in Obsidian; leave a blank line to start
 
 ## Accounts
 
-The first account created on a server is its admin. Everyone can open **Settings** (click your name at the bottom of the sidebar) to change their password, which signs out their other devices, or to sign out other devices directly. Settings also lists your attachments, shows which notes use each one, and can delete the ones no note links to. Unused files are never deleted automatically.
+The first account created on a server is its admin. Everyone can open **Settings** (click your name at the bottom of the sidebar) to change their password, which signs out their other devices, or to sign out other devices directly. Settings also lists your attachments, shows which notes use each one, and can delete the ones no note links to. A file that only an earlier version of a note uses is marked “(history)” and counts as used, so restoring that version never shows a broken image. Unused files are never deleted automatically.
+
+## Version history
+
+The clock button above a note opens **History**. While you edit, Inkwell keeps the note as it was every 10 minutes, and before any big change (500 characters, or a third of a note longer than 100 characters, such as a large paste or deletion). Pick a version to see what's different from the note now, or switch to **Full version** to read it formatted. **Restore this version** puts its title and text back; the text it replaces is kept as a version first, so a restore can be undone the same way.
+
+Versions thin out as they age: every version from the last day, one per hour for the last week, one per day before that, and at most 50 per note. They're deleted with the note, and aren't included in exports.
 
 Admins also see **People on this server**, where they can:
 
@@ -121,7 +128,7 @@ Inkwell's own export imports back exactly, attachments included. Uploads are lim
 
 ## Backups
 
-To take your notes elsewhere, use **Export all notes** at the bottom of the sidebar (or `GET /api/export`). You get a zip with one folder per notebook and one Markdown file per note, each starting with a small YAML header (title, created and updated dates) that Obsidian, Joplin and most Markdown tools understand. Attachments go in an `attachments/` folder, and links in the notes point into it, so the export also opens in Obsidian. Notes in the trash aren't included.
+To take your notes elsewhere, use **Export all notes** at the bottom of the sidebar (or `GET /api/export`). You get a zip with one folder per notebook and one Markdown file per note, each starting with a small YAML header (title, created and updated dates) that Obsidian, Joplin and most Markdown tools understand. Attachments go in an `attachments/` folder, and links in the notes point into it, so the export also opens in Obsidian. Notes in the trash and version history aren't included.
 
 
 Everything lives in `DATA_DIR`: notes, notebooks and accounts in `inkwell.db`, and uploaded images and files in `attachments/`. Back up both. While the app is running, use SQLite's online backup for the database and copy the folder:
@@ -186,7 +193,7 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `GET`    | `/api/tags`           | tags in use, with note counts                 |
 | `GET`    | `/api/export`         | zip of all notes outside the trash, with attachments |
 | `POST`   | `/api/attachments`    | multipart form data, one or more `files`; returns each file's `url` and ready-to-insert `markdown` |
-| `GET`    | `/api/attachments`    | your attachments, with the notes that link to each |
+| `GET`    | `/api/attachments`    | your attachments, with the notes that link to each (`history: true` when only an earlier version does) |
 | `GET`    | `/api/attachments/:id/:name` | the file (owner only); verified images display inline, other files download |
 | `DELETE` | `/api/attachments/:id` | deletes one attachment |
 | `DELETE` | `/api/attachments?unused=true` | deletes attachments no note links to |
@@ -195,6 +202,9 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `GET`    | `/api/notes/:id/backlinks` | notes that `[[link]]` here, with the linking line |
 | `GET`    | `/api/notes/:id/relink` | `?from=<old title>`: notes whose links would move to this note's current title |
 | `POST`   | `/api/notes/:id/relink` | `{ from }`: rewrites those links to the current title |
+| `GET`    | `/api/notes/:id/versions` | earlier versions, newest first, without their text |
+| `GET`    | `/api/notes/:id/versions/:vid` | one version with its `title` and `content` |
+| `POST`   | `/api/notes/:id/versions/:vid/restore` | puts that version back (keeping the current text as a version first); returns the note |
 | `GET`    | `/api/health`         |                                               |
 
 Links work the same way: `[[Title]]` or `[[Title|shown text]]` in note content is indexed on save and matched to note titles ignoring case, so when you rename a note, Inkwell offers to point the links at the new title (`POST /api/notes/:id/relink`), keeping any `#heading` and display text.

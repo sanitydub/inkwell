@@ -86,5 +86,21 @@ export interface Attachment {
 
 /** An attachment as listed in Settings, with the notes that link to it. */
 export interface AttachmentUsage extends Attachment {
-	usedBy: { id: string; title: string }[];
+	/** Notes linking to it. `history` is true when only an earlier version of the note does. */
+	usedBy: { id: string; title: string; history?: boolean }[];
+}
+
+/** An earlier version of a note, as listed in its history. */
+export interface NoteVersionSummary {
+	id: string;
+	title: string;
+	/** 'auto' while editing, 'before-restore' when kept just before another version was restored. */
+	reason: 'auto' | 'before-restore';
+	createdAt: number;
+	/** Length of the text in characters. */
+	size: number;
+}
+
+export interface NoteVersion extends NoteVersionSummary {
+	content: string;
 }

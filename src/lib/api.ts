@@ -1,4 +1,19 @@
-import type { Attachment, AttachmentUsage, Backlink, ManagedUser, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, User, View } from './types';
+import type {
+	Attachment,
+	AttachmentUsage,
+	Backlink,
+	ManagedUser,
+	Note,
+	Notebook,
+	NotePatch,
+	NoteSummary,
+	NoteTitle,
+	NoteVersion,
+	NoteVersionSummary,
+	TagCount,
+	User,
+	View
+} from './types';
 
 export interface NoteQuery {
 	view: View;
@@ -86,6 +101,11 @@ export const api = {
 	relinkCandidates: (id: string, from: string) =>
 		request<{ notes: NoteTitle[] }>('GET', `${notePath(id)}/relink?${new URLSearchParams({ from })}`),
 	relink: (id: string, from: string) => request<{ updated: NoteTitle[] }>('POST', `${notePath(id)}/relink`, { from }),
+	listVersions: (id: string) => request<{ versions: NoteVersionSummary[] }>('GET', `${notePath(id)}/versions`),
+	getVersion: (id: string, versionId: string) =>
+		request<{ version: NoteVersion }>('GET', `${notePath(id)}/versions/${encodeURIComponent(versionId)}`),
+	restoreVersion: (id: string, versionId: string) =>
+		request<{ note: Note }>('POST', `${notePath(id)}/versions/${encodeURIComponent(versionId)}/restore`),
 
 	changePassword: (currentPassword: string, newPassword: string) =>
 		request<{ otherSessionsSignedOut: number }>('POST', '/me/password', { currentPassword, newPassword }),

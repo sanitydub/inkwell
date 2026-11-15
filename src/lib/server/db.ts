@@ -119,6 +119,18 @@ const migrations: (string | ((db: DatabaseSync) => void))[] = [
 		created_at INTEGER NOT NULL
 	);
 	CREATE INDEX attachments_user_hash ON attachments(user_id, sha256);
+	`,
+	// 6: version history. Earlier copies of a note's title and text, thinned out as they age.
+	`
+	CREATE TABLE note_versions (
+		id         TEXT PRIMARY KEY,
+		note_id    TEXT NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+		title      TEXT NOT NULL,
+		content    TEXT NOT NULL,
+		reason     TEXT NOT NULL,
+		created_at INTEGER NOT NULL
+	);
+	CREATE INDEX note_versions_note ON note_versions(note_id, created_at DESC);
 	`
 ];
 

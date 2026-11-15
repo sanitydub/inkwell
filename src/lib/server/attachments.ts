@@ -151,11 +151,27 @@ export function readAttachment(userId: string, id: string): { attachment: Attach
 	return { attachment: toAttachment(row), data, inline: isInlineImage(row.type, data) };
 }
 
-/** Notes (including ones in the trash) whose text links to this attachment. */
-function notesUsing(userId: string, id: string) {
-	return getDb()
+/**
+ * Notes (including ones in the trash) that link to this attachment, in their text or in an earlier
+ * version. Files only an earlier version uses are marked `history`, and still count as used so
+ * restoring that version never brings back a broken image.
+ */
+function notesUsing(userId: string, id: string): AttachmentUsage['usedBy'] {
+	const db = getDb();
+	const link = URL_PREFIX + id;
+	const current = db
 		.prepare("SELECT id, title FROM notes WHERE user_id = ? AND content LIKE '%' || ? || '%' ORDER BY updated_at DESC")
-		.all(userId, URL_PREFIX + id) as unknown as { id: string; title: string }[];
+		.all(userId, link) as unknown as { id: string; title: string }[];
+	const seen = new Set(current.map((n) => n.id));
+	const inHistory = (
+		db
+			.prepare(
+				`SELECT DISTINCT n.id, n.title FROM note_versions v JOIN notes n ON n.id = v.note_id
+				 WHERE n.user_id = ? AND v.content LIKE '%' || ? || '%' ORDER BY n.updated_at DESC`
+			)
+			.all(userId, link) as unknown as { id: string; title: string }[]
+	).filter((n) => !seen.has(n.id));
+	return [...current, ...inHistory.map((n) => ({ ...n, history: true }))];
 }
 
 export function listAttachments(userId: string): AttachmentUsage[] {
@@ -173,7 +189,7 @@ export function deleteAttachment(userId: string, id: string): boolean {
 	return true;
 }
 
-/** Deletes every attachment no note links to. Returns how many and how many bytes were freed. */
+/** Deletes every attachment no note (or earlier version of one) links to. Returns how many and how many bytes were freed. */
 export function deleteUnusedAttachments(userId: string): { deleted: number; freedBytes: number } {
 	let deleted = 0;
 	let freedBytes = 0;

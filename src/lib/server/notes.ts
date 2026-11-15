@@ -2,6 +2,7 @@ import { error } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
 import { getDb, transaction } from './db';
 import { notebookExists } from './notebooks';
+import { getVersion, prepareRestore, snapshotBeforeSave } from './versions';
 import { snippetFrom } from '#lib/snippet.ts';
 import { extractTags } from '#lib/tags.ts';
 import { extractLinks, isLinkableTitle, linkRegExp, linkTarget, normalizeTitle, retargetLinks } from '#lib/links.ts';
@@ -267,11 +268,30 @@ export function updateNote(userId: string, id: string, body: Record<string, unkn
 	if (!sets.length) error(400, 'Send at least one of: title, content, notebookId, pinned, trashed.');
 
 	return transaction(() => {
+		if ('title' in body || 'content' in body) {
+			const owned = getDb().prepare('SELECT 1 FROM notes WHERE id = ? AND user_id = ?').get(id, userId);
+			if (owned) snapshotBeforeSave(id, { title: body.title as string | undefined, content: body.content as string | undefined });
+		}
 		const row = getDb()
 			.prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND user_id = ? RETURNING *`)
 			.get(...params, id, userId) as unknown as NoteRow | undefined;
 		if (!row) return null;
 		if ('content' in body) indexContent(id, row.content);
+		return toNote(row, tagsOf(id));
+	});
+}
+
+/** Puts an earlier version's title and text back. The note as it was is kept as a version first. */
+export function restoreNoteVersion(userId: string, id: string, versionId: string): Note | null {
+	return transaction(() => {
+		const version = getVersion(userId, id, versionId);
+		if (!version) return null;
+		prepareRestore(id, version);
+		const row = getDb()
+			.prepare('UPDATE notes SET title = ?, content = ?, updated_at = ? WHERE id = ? AND user_id = ? RETURNING *')
+			.get(version.title, version.content, Date.now(), id, userId) as unknown as NoteRow | undefined;
+		if (!row) return null;
+		indexContent(id, row.content);
 		return toNote(row, tagsOf(id));
 	});
 }

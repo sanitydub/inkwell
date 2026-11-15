@@ -1,8 +1,20 @@
 <script lang="ts">
 	import { tick } from 'svelte';
-	import { ChevronDown, ChevronLeft, Download, Link2, Notebook as NotebookIcon, Pin, PinOff, RotateCcw, Trash2 } from '@lucide/svelte';
+	import {
+		ChevronDown,
+		ChevronLeft,
+		Download,
+		History,
+		Link2,
+		Notebook as NotebookIcon,
+		Pin,
+		PinOff,
+		RotateCcw,
+		Trash2
+	} from '@lucide/svelte';
 	import Editor from './Editor.svelte';
 	import FormatToolbar from './FormatToolbar.svelte';
+	import HistoryPanel from './HistoryPanel.svelte';
 	import { longDate } from '#lib/format.ts';
 	import { extractTags } from '#lib/tags.ts';
 	import { noteToMarkdown, safeFileName } from '#lib/note-file.ts';
@@ -28,10 +40,12 @@
 
 	// "Linked from" list: closes on outside click, Escape, or opening another note.
 	let showBacklinks = $state(false);
+	let showHistory = $state(false);
 	let backlinksBox = $state<HTMLElement>();
 	$effect(() => {
 		note?.id;
 		showBacklinks = false;
+		showHistory = false;
 	});
 
 	function closeBacklinksOnOutsideClick(e: MouseEvent) {
@@ -131,6 +145,17 @@
 						onclick={() => ws.togglePin()}
 					>
 						{#if note.pinned}<PinOff size={17} />{:else}<Pin size={17} />{/if}
+					</button>
+					<button
+						class="icon-btn"
+						aria-label="History"
+						title="History: earlier versions of this note"
+						onclick={async () => {
+							await ws.flush();
+							showHistory = true;
+						}}
+					>
+						<History size={17} />
 					</button>
 					<button class="icon-btn" aria-label="Download as Markdown" title="Download as Markdown" onclick={download}>
 						<Download size={17} />
@@ -232,6 +257,9 @@
 				{/key}
 			</div>
 		</div>
+		{#if showHistory}
+			<HistoryPanel {ws} onclose={() => (showHistory = false)} />
+		{/if}
 	{:else}
 		<div class="placeholder">
 			{#if ws.view === 'trash'}
