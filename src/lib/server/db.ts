@@ -131,6 +131,21 @@ const migrations: (string | ((db: DatabaseSync) => void))[] = [
 		created_at INTEGER NOT NULL
 	);
 	CREATE INDEX note_versions_note ON note_versions(note_id, created_at DESC);
+	`,
+	// 7: personal access tokens. Only a SHA-256 of each token is kept.
+	`
+	CREATE TABLE api_tokens (
+		id           TEXT PRIMARY KEY,
+		user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		name         TEXT NOT NULL,
+		token_hash   TEXT NOT NULL UNIQUE,
+		last_four    TEXT NOT NULL,
+		scope        TEXT NOT NULL,
+		created_at   INTEGER NOT NULL,
+		last_used_at INTEGER,
+		expires_at   INTEGER
+	);
+	CREATE INDEX api_tokens_user ON api_tokens(user_id);
 	`
 ];
 

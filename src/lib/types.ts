@@ -90,6 +90,22 @@ export interface AttachmentUsage extends Attachment {
 	usedBy: { id: string; title: string; history?: boolean }[];
 }
 
+/** What an API token may do: everything a signed-in session can (except account and admin settings), or only read. */
+export type TokenScope = 'read' | 'write';
+
+/** A personal access token as listed in Settings. The secret itself is only shown when it's created. */
+export interface ApiToken {
+	id: string;
+	name: string;
+	scope: TokenScope;
+	/** The last four characters, to tell tokens apart. */
+	lastFour: string;
+	createdAt: number;
+	lastUsedAt: number | null;
+	/** Null when it never expires. */
+	expiresAt: number | null;
+}
+
 /** An earlier version of a note, as listed in its history. */
 export interface NoteVersionSummary {
 	id: string;

@@ -1,6 +1,8 @@
 import type {
 	Attachment,
+	ApiToken,
 	AttachmentUsage,
+	TokenScope,
 	Backlink,
 	ManagedUser,
 	Note,
@@ -111,6 +113,10 @@ export const api = {
 		request<{ otherSessionsSignedOut: number }>('POST', '/me/password', { currentPassword, newPassword }),
 	countOtherSessions: () => request<{ otherSessions: number }>('GET', '/me/sessions'),
 	signOutOtherSessions: () => request<{ signedOut: number }>('DELETE', '/me/sessions'),
+	listTokens: () => request<{ tokens: ApiToken[] }>('GET', '/me/tokens'),
+	createToken: (name: string, scope: TokenScope, expiresInDays: number | null) =>
+		request<{ token: ApiToken; secret: string }>('POST', '/me/tokens', { name, scope, expiresInDays }),
+	revokeToken: (id: string) => request<void>('DELETE', `/me/tokens/${encodeURIComponent(id)}`),
 
 	listUsers: () => request<{ users: ManagedUser[] }>('GET', '/admin/users'),
 	createUser: (username: string, password: string, isAdmin: boolean) =>

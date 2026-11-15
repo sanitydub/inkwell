@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { ChevronLeft } from '@lucide/svelte';
 	import { api, ApiError } from '#lib/api.ts';
-	import type { AttachmentUsage, ManagedUser } from '#lib/types.ts';
+	import type { ApiToken, AttachmentUsage, ManagedUser, TokenScope } from '#lib/types.ts';
 
 	let { data } = $props();
 	const me = $derived(data.user);
@@ -115,6 +115,61 @@
 	// ---- People (admins) ----------------------------------------------------------
 
 	let users = $state<ManagedUser[]>([]);
+	// ---- API tokens ---------------------------------------------------------------
+
+	let tokens = $state<ApiToken[] | null>(null);
+	let tokensStatus = $state<Status>(null);
+	let tokenName = $state('');
+	let tokenScope = $state<TokenScope>('write');
+	let tokenExpiry = $state('90');
+	let creatingToken = $state(false);
+	/** The secret of the token just created: shown once, until the page is left. */
+	let newSecret = $state<{ id: string; secret: string } | null>(null);
+	let copied = $state(false);
+
+	async function createToken(e: SubmitEvent) {
+		e.preventDefault();
+		tokensStatus = null;
+		creatingToken = true;
+		try {
+			const { token, secret } = await api.createToken(tokenName, tokenScope, tokenExpiry === 'never' ? null : Number(tokenExpiry));
+			tokens = [token, ...(tokens ?? [])];
+			newSecret = { id: token.id, secret };
+			copied = false;
+			tokenName = '';
+		} catch (err) {
+			tokensStatus = failure(err);
+		} finally {
+			creatingToken = false;
+		}
+	}
+
+	async function copySecret() {
+		if (!newSecret) return;
+		try {
+			await navigator.clipboard.writeText(newSecret.secret);
+			copied = true;
+		} catch {
+			tokensStatus = { ok: false, text: 'Couldn’t copy. Select the token and copy it yourself.' };
+		}
+	}
+
+	async function revokeToken(t: ApiToken) {
+		if (!confirm(`Revoke “${t.name}”? Anything using it stops working straight away.`)) return;
+		tokensStatus = null;
+		try {
+			await api.revokeToken(t.id);
+			tokens = (tokens ?? []).filter((x) => x.id !== t.id);
+			if (newSecret?.id === t.id) newSecret = null;
+			tokensStatus = { ok: true, text: `Revoked “${t.name}”.` };
+		} catch (err) {
+			tokensStatus = failure(err);
+		}
+	}
+
+	const tokenExpiryText = (t: ApiToken) =>
+		t.expiresAt === null ? 'Never' : t.expiresAt <= Date.now() ? `Expired ${day.format(t.expiresAt)}` : day.format(t.expiresAt);
+
 	let peopleStatus = $state<Status>(null);
 	let newUsername = $state('');
 	let newUserPassword = $state('');
@@ -130,6 +185,10 @@
 			devicesStatus = failure(err);
 		}
 		loadAttachments();
+		api.listTokens().then(
+			(r) => (tokens = r.tokens),
+			(err) => (tokensStatus = failure(err))
+		);
 		if (me.isAdmin) {
 			try {
 				users = (await api.listUsers()).users;
@@ -265,6 +324,81 @@
 		</p>
 		<button class="btn" disabled={!otherSessions} onclick={signOutOthers}>Sign out other devices</button>
 		{@render statusLine(devicesStatus)}
+	</section>
+
+	<section aria-labelledby="tokens-heading">
+		<h2 id="tokens-heading">API tokens</h2>
+		<p class="muted">
+			Let scripts and apps use your notes through the API by sending
+			<code>Authorization: Bearer &lt;token&gt;</code>. A token can do what you can, except change account settings,
+			tokens or other accounts. Read-only tokens can’t change anything.
+		</p>
+
+		{#if newSecret}
+			<div class="secret" role="status">
+				<p><strong>Copy this token now.</strong> It won’t be shown again.</p>
+				<div class="secret-row">
+					<input readonly value={newSecret.secret} aria-label="New API token" onfocus={(e) => e.currentTarget.select()} />
+					<button class="btn" onclick={copySecret}>{copied ? 'Copied' : 'Copy'}</button>
+				</div>
+			</div>
+		{/if}
+
+		{#if tokens === null}
+			<p>Loading…</p>
+		{:else if tokens.length}
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th scope="col">Name</th>
+							<th scope="col">Access</th>
+							<th scope="col">Last used</th>
+							<th scope="col">Expires</th>
+							<th scope="col"><span class="visually-hidden">Actions</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each tokens as t (t.id)}
+							<tr>
+								<td>{t.name} <span class="muted token-end">…{t.lastFour}</span></td>
+								<td>{t.scope === 'read' ? 'Read only' : 'Read & write'}</td>
+								<td class:muted={!t.lastUsedAt}>{t.lastUsedAt ? day.format(t.lastUsedAt) : 'Never'}</td>
+								<td class:expired={t.expiresAt !== null && t.expiresAt <= Date.now()}>{tokenExpiryText(t)}</td>
+								<td class="actions"><button class="btn danger" onclick={() => revokeToken(t)}>Revoke</button></td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+
+		<form class="fields token-form" onsubmit={createToken}>
+			<label>
+				<span>Token name</span>
+				<input bind:value={tokenName} maxlength="60" required placeholder="e.g. Phone app, backup script" />
+			</label>
+			<label>
+				<span>Access</span>
+				<select bind:value={tokenScope}>
+					<option value="write">Read & write</option>
+					<option value="read">Read only</option>
+				</select>
+			</label>
+			<label>
+				<span>Expires</span>
+				<select bind:value={tokenExpiry}>
+					<option value="30">In 30 days</option>
+					<option value="90">In 90 days</option>
+					<option value="365">In a year</option>
+					<option value="never">Never</option>
+				</select>
+			</label>
+			<div>
+				<button class="btn primary" disabled={creatingToken}>{creatingToken ? 'Creating…' : 'Create token'}</button>
+			</div>
+		</form>
+		{@render statusLine(tokensStatus)}
 	</section>
 
 	<section aria-labelledby="attachments-heading">
@@ -502,14 +636,16 @@
 		font-size: 0.875rem;
 		font-weight: 600;
 	}
-	input:not([type='checkbox']) {
+	input:not([type='checkbox']),
+	select {
 		height: 2.4rem;
 		padding: 0 0.75rem;
 		border: 1px solid var(--line);
 		border-radius: var(--radius);
 		background: var(--paper);
 	}
-	input:not([type='checkbox']):focus {
+	input:not([type='checkbox']):focus,
+	select:focus {
 		outline: none;
 		border-color: var(--accent);
 		box-shadow: 0 0 0 1px var(--accent);
@@ -531,6 +667,41 @@
 		color: var(--muted);
 		font-size: 0.8rem;
 	}
+	.token-form {
+		margin-top: 1.25rem;
+	}
+	.token-end {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+	}
+	.expired {
+		color: var(--danger);
+	}
+	.secret {
+		margin: 0 0 1rem;
+		padding: 0.75rem 0.9rem;
+		border: 1px solid var(--accent);
+		border-radius: var(--radius);
+		background: var(--accent-soft);
+	}
+	.secret p {
+		margin: 0 0 0.5rem;
+		font-size: 0.9rem;
+	}
+	.secret-row {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.secret-row input {
+		flex: 1;
+		min-width: 0;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+	}
+	.secret-row .btn {
+		height: 2.4rem;
+	}
+
 	.status {
 		margin: 0.75rem 0 0;
 		padding: 0.55rem 0.8rem;

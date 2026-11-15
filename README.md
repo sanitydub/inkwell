@@ -22,6 +22,7 @@ A simple note-taking app you host yourself. Write in a live view that formats as
 - Sign-in and sign-up rate limiting
 - Multiple accounts per server, each with private notes; admins add, reset and remove accounts from Settings
 - Change your password and sign out other devices from Settings
+- Personal API tokens for scripts and apps, read & write or read only, created and revoked in Settings
 - Light and dark themes, phone and desktop layouts
 - No external requests: fonts and scripts are served by the app itself
 
@@ -75,7 +76,7 @@ Set `ADDRESS_HEADER=x-forwarded-for` (and `XFF_DEPTH=1` for a single proxy) so t
 
 ### Rate limits
 
-To slow down password guessing, sign-in is blocked for 15 minutes after 10 failed attempts for one username or 20 from one IP address, and an IP address can create at most 5 accounts an hour. Counters are kept in memory and reset when the server restarts.
+To slow down password guessing, sign-in is blocked for 15 minutes after 10 failed attempts for one username or 20 from one IP address, and an IP address can create at most 5 accounts an hour. Wrong API tokens count as failed sign-ins for the IP address they come from. Counters are kept in memory and reset when the server restarts.
 
 ## Formatting
 
@@ -177,7 +178,18 @@ src/
 
 ### API
 
-All endpoints take and return JSON. Authentication is a session cookie set by register or login.
+All endpoints take and return JSON. Sign in with either a session cookie (set by register or login) or a personal API token.
+
+**API tokens.** Create one in **Settings → API tokens**, give it a name, choose **Read & write** or **Read only**, and pick when it expires (30 days, 90 days, a year, or never). It's shown once; Inkwell only stores a hash of it. Send it in the `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer ink_…" http://localhost:3000/api/notes
+curl -H "Authorization: Bearer ink_…" -H "content-type: application/json" \
+  -d '{"title":"From a script","content":"Hello #api"}' http://localhost:3000/api/notes
+```
+
+A token can do everything you can through the API except the routes under `/api/me/password`, `/api/me/sessions`, `/api/me/tokens` and `/api/admin`, which need you signed in on the website. Read-only tokens get `403` for anything but `GET`. Revoking a token, or deleting the account, stops it at once; changing your password doesn't. Requests that change data with a session cookie must come from the app's own origin (the `Origin` header); token requests don't need it.
+
 
 | Method   | Path                  | Body / query                                  |
 | -------- | --------------------- | --------------------------------------------- |
@@ -188,6 +200,9 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `POST`   | `/api/me/password`    | `{ currentPassword, newPassword }`; signs out your other devices |
 | `GET`    | `/api/me/sessions`    | how many other devices are signed in          |
 | `DELETE` | `/api/me/sessions`    | signs out your other devices                  |
+| `GET`    | `/api/me/tokens`      | your API tokens (never their secrets)         |
+| `POST`   | `/api/me/tokens`      | `{ name, scope: "read" \| "write", expiresInDays: 30 \| 90 \| 365 \| null }`; returns `{ token, secret }`, the only time the secret is shown |
+| `DELETE` | `/api/me/tokens/:id`  | revokes a token                               |
 | `GET`    | `/api/admin/users`    | admins only: every account, with note counts  |
 | `POST`   | `/api/admin/users`    | admins only: `{ username, password, isAdmin? }` |
 | `PATCH`  | `/api/admin/users/:id`| admins only: `{ password?, isAdmin? }`        |
