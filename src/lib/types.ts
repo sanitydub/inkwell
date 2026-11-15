@@ -3,7 +3,14 @@
 export interface User {
 	id: string;
 	username: string;
+	/** Admins can manage other accounts. The first account on a server is an admin. */
+	isAdmin: boolean;
 	createdAt: number;
+}
+
+/** An account as an admin sees it. */
+export interface ManagedUser extends User {
+	noteCount: number;
 }
 
 export type View = 'all' | 'pinned' | 'trash';

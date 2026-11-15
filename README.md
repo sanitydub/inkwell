@@ -16,7 +16,8 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 - Download any note as a `.md` file, or export everything as a zip (one folder per notebook)
 - Import Markdown files or a zip, such as an Obsidian vault, a Joplin Markdown export, or an Inkwell export
 - Sign-in and sign-up rate limiting
-- Multiple accounts per server, each with private notes
+- Multiple accounts per server, each with private notes; admins add, reset and remove accounts from Settings
+- Change your password and sign out other devices from Settings
 - Light and dark themes, phone and desktop layouts
 - No external requests: fonts and scripts are served by the app itself
 
@@ -31,7 +32,7 @@ Open http://localhost:3000 and create the first account. Notes are stored in the
 Before exposing it to a network, edit `docker-compose.yml`:
 
 - `ORIGIN`: the exact address people use, e.g. `https://notes.example.com`
-- `ALLOW_REGISTRATION`: set to `"false"` once everyone has an account (the first account can always be created)
+- `ALLOW_REGISTRATION`: set to `"false"` once everyone has an account (the first account can always be created, and admins can still add people in Settings)
 
 Put it behind a reverse proxy with HTTPS (Caddy, Traefik, nginx) for anything beyond your LAN. Session cookies are marked `Secure` automatically when the app is served over HTTPS.
 
@@ -50,7 +51,7 @@ DATA_DIR=./data ORIGIN=http://localhost:3000 node build
 | Variable             | Default | Purpose                                                        |
 | -------------------- | ------- | -------------------------------------------------------------- |
 | `DATA_DIR`           | `data`  | Folder for `inkwell.db`. Created if missing.                   |
-| `ALLOW_REGISTRATION` | `true`  | Whether new people can sign up. The first account always can.  |
+| `ALLOW_REGISTRATION` | `true`  | Whether new people can sign up. The first account always can, and admins can always add accounts. |
 | `ORIGIN`             | —       | Public URL of the app. Needed in production.                   |
 | `PORT`               | `3000`  | Port to listen on.                                             |
 | `BODY_SIZE_LIMIT`    | `512K`  | Largest request accepted (Docker image sets `10M` for big notes). |
@@ -64,6 +65,19 @@ Set `ADDRESS_HEADER=x-forwarded-for` (and `XFF_DEPTH=1` for a single proxy) so t
 ### Rate limits
 
 To slow down password guessing, sign-in is blocked for 15 minutes after 10 failed attempts for one username or 20 from one IP address, and an IP address can create at most 5 accounts an hour. Counters are kept in memory and reset when the server restarts.
+
+## Accounts
+
+The first account created on a server is its admin. Everyone can open **Settings** (click your name at the bottom of the sidebar) to change their password, which signs out their other devices, or to sign out other devices directly.
+
+Admins also see **People on this server**, where they can:
+
+- add accounts, even when `ALLOW_REGISTRATION=false`, which makes this the way to invite people to a closed server;
+- reset someone's password, which signs them out everywhere;
+- make someone an admin, or remove admin (there's always at least one admin);
+- delete an account along with all its notes.
+
+![The Settings page: account details, password change, devices, and the admin's list of people on the server](docs/screenshots/settings.png)
 
 ## Importing notes
 
@@ -121,6 +135,13 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `POST`   | `/api/auth/login`     | `{ username, password }`                      |
 | `POST`   | `/api/auth/logout`    |                                               |
 | `GET`    | `/api/me`             |                                               |
+| `POST`   | `/api/me/password`    | `{ currentPassword, newPassword }`; signs out your other devices |
+| `GET`    | `/api/me/sessions`    | how many other devices are signed in          |
+| `DELETE` | `/api/me/sessions`    | signs out your other devices                  |
+| `GET`    | `/api/admin/users`    | admins only: every account, with note counts  |
+| `POST`   | `/api/admin/users`    | admins only: `{ username, password, isAdmin? }` |
+| `PATCH`  | `/api/admin/users/:id`| admins only: `{ password?, isAdmin? }`        |
+| `DELETE` | `/api/admin/users/:id`| admins only: deletes the account and its notes |
 | `GET`    | `/api/notes`          | `?view=all\|pinned\|trash&q=…&notebook=<id>&tag=<name>` |
 | `POST`   | `/api/notes`          | `{ title?, content?, notebookId? }`           |
 | `GET`    | `/api/notes/:id`      |                                               |

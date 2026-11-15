@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { FileArchive, FileText, FileUp, Hash, LogOut, Monitor, Moon, Notebook as NotebookIcon, Pin, Plus, Sun, Trash2 } from '@lucide/svelte';
+	import { FileArchive, FileText, FileUp, Hash, LogOut, Monitor, Moon, Notebook as NotebookIcon, Pin, Plus, Settings, Sun, Trash2 } from '@lucide/svelte';
 	import type { User, View } from '#lib/types.ts';
 	import type { Workspace } from '#lib/workspace.svelte.ts';
 
@@ -195,42 +195,47 @@
 	</div>
 
 	<div class="foot">
-		<span class="user" title="Signed in as {user.username}">{user.username}</span>
-		<button class="icon-btn" onclick={cycleTheme} aria-label={themeLabel[theme]} title={themeLabel[theme]}>
-			{#if theme === 'light'}
-				<Sun size={16} />
-			{:else if theme === 'dark'}
-				<Moon size={16} />
-			{:else}
-				<Monitor size={16} />
-			{/if}
-		</button>
-		<button
-			class="icon-btn"
-			onclick={() => fileInput?.click()}
-			disabled={ws.importing}
-			aria-label="Import notes"
-			title="Import Markdown files or a zip"
-		>
-			<FileUp size={16} />
-		</button>
-		<input
-			bind:this={fileInput}
-			type="file"
-			multiple
-			hidden
-			accept=".md,.markdown,.txt,.zip,text/markdown,text/plain,application/zip"
-			onchange={(e) => {
-				ws.importFiles([...(e.currentTarget.files ?? [])]);
-				e.currentTarget.value = '';
-			}}
-		/>
-		<button class="icon-btn" onclick={exportAll} aria-label="Export all notes" title="Export all notes as a zip">
-			<FileArchive size={16} />
-		</button>
-		<button class="icon-btn" onclick={onsignout} aria-label="Sign out" title="Sign out">
-			<LogOut size={16} />
-		</button>
+		<a class="user" href="/settings" title="Account settings (signed in as {user.username})">
+			<Settings size={15} strokeWidth={1.75} />
+			<span>{user.username}</span>
+		</a>
+		<div class="tools">
+			<button class="icon-btn" onclick={cycleTheme} aria-label={themeLabel[theme]} title={themeLabel[theme]}>
+				{#if theme === 'light'}
+					<Sun size={16} />
+				{:else if theme === 'dark'}
+					<Moon size={16} />
+				{:else}
+					<Monitor size={16} />
+				{/if}
+			</button>
+			<button
+				class="icon-btn"
+				onclick={() => fileInput?.click()}
+				disabled={ws.importing}
+				aria-label="Import notes"
+				title="Import Markdown files or a zip"
+			>
+				<FileUp size={16} />
+			</button>
+			<input
+				bind:this={fileInput}
+				type="file"
+				multiple
+				hidden
+				accept=".md,.markdown,.txt,.zip,text/markdown,text/plain,application/zip"
+				onchange={(e) => {
+					ws.importFiles([...(e.currentTarget.files ?? [])]);
+					e.currentTarget.value = '';
+				}}
+			/>
+			<button class="icon-btn" onclick={exportAll} aria-label="Export all notes" title="Export all notes as a zip">
+				<FileArchive size={16} />
+			</button>
+			<button class="icon-btn" onclick={onsignout} aria-label="Sign out" title="Sign out">
+				<LogOut size={16} />
+			</button>
+		</div>
 	</div>
 </nav>
 
@@ -345,21 +350,43 @@
 		line-height: 1.4;
 	}
 
+	/* Account link on its own row, so the username isn't squeezed by the tool buttons. */
 	.foot {
-		display: flex;
-		align-items: center;
-		gap: 0.15rem;
+		display: grid;
+		gap: 0.2rem;
 		margin: 0 0.6rem;
-		padding: 0.6rem 0 0 0.6rem;
+		padding: 0.5rem 0 0 0.6rem;
 		border-top: 1px solid var(--line);
+	}
+	.tools {
+		display: flex;
+		gap: 0.15rem;
+		margin-left: -0.4rem;
 	}
 	.user {
 		flex: 1;
 		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		height: 2rem;
+		margin-left: -0.4rem;
+		padding: 0 0.4rem;
+		border-radius: var(--radius);
+		color: var(--muted);
+		font-size: 0.85rem;
+		text-decoration: none;
+	}
+	.user:hover {
+		background: var(--panel-strong);
+		color: var(--ink);
+	}
+	.user :global(svg) {
+		flex: none;
+	}
+	.user span {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		color: var(--muted);
-		font-size: 0.85rem;
 	}
 </style>

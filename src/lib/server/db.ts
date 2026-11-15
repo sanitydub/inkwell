@@ -99,7 +99,13 @@ const migrations: (string | ((db: DatabaseSync) => void))[] = [
 		for (const row of db.prepare('SELECT id, content FROM notes').all() as { id: string; content: string }[]) {
 			for (const target of extractLinks(row.content)) insert.run(row.id, target);
 		}
-	}
+	},
+
+	// 4: admins. The oldest existing account becomes the admin.
+	`
+	ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
+	UPDATE users SET is_admin = 1 WHERE id = (SELECT id FROM users ORDER BY created_at LIMIT 1);
+	`
 ];
 
 let db: DatabaseSync | undefined;

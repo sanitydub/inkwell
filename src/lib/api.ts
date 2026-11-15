@@ -1,4 +1,4 @@
-import type { Backlink, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, User, View } from './types';
+import type { Backlink, ManagedUser, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, User, View } from './types';
 
 export interface NoteQuery {
 	view: View;
@@ -82,6 +82,18 @@ export const api = {
 	listTags: () => request<{ tags: TagCount[] }>('GET', '/tags'),
 	listTitles: () => request<{ notes: NoteTitle[] }>('GET', '/titles'),
 	listBacklinks: (id: string) => request<{ backlinks: Backlink[] }>('GET', `${notePath(id)}/backlinks`),
+
+	changePassword: (currentPassword: string, newPassword: string) =>
+		request<{ otherSessionsSignedOut: number }>('POST', '/me/password', { currentPassword, newPassword }),
+	countOtherSessions: () => request<{ otherSessions: number }>('GET', '/me/sessions'),
+	signOutOtherSessions: () => request<{ signedOut: number }>('DELETE', '/me/sessions'),
+
+	listUsers: () => request<{ users: ManagedUser[] }>('GET', '/admin/users'),
+	createUser: (username: string, password: string, isAdmin: boolean) =>
+		request<ManagedUser>('POST', '/admin/users', { username, password, isAdmin }),
+	updateUser: (id: string, patch: { password?: string; isAdmin?: boolean }) =>
+		request<ManagedUser>('PATCH', `/admin/users/${encodeURIComponent(id)}`, patch),
+	deleteUser: (id: string) => request<void>('DELETE', `/admin/users/${encodeURIComponent(id)}`),
 
 	/** Uploads .md/.txt files and .zip archives; folders become notebooks. */
 	async importFiles(files: File[]): Promise<ImportResult> {

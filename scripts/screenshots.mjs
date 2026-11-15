@@ -155,10 +155,12 @@ async function seed(base) {
 		noteIds[note.title] = created.id;
 		await new Promise((r) => setTimeout(r, 15)); // distinct "last edited" times
 	}
+	// A second person, so the admin's People table on the settings page has something to show.
+	await call('POST', '/admin/users', { username: 'sam', password: 'demo-password-only' });
 	return { token, noteIds };
 }
 
-async function capture(browser, base, token, { file, width, height, scale, theme, mode, path, before }) {
+async function capture(browser, base, token, { file, width, height, scale, theme, mode, path, before, fullPage = false }) {
 	const page = await browser.newPage();
 	await page.setViewport({ width, height, deviceScaleFactor: scale, isMobile: width < 760, hasTouch: width < 760 });
 	await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: theme }]);
@@ -175,7 +177,7 @@ async function capture(browser, base, token, { file, width, height, scale, theme
 	await page.evaluate(() => document.fonts.ready);
 	if (before) await before(page);
 	await new Promise((r) => setTimeout(r, 300));
-	await page.screenshot({ path: join(OUT, file) });
+	await page.screenshot({ path: join(OUT, file), fullPage });
 	await page.close();
 	console.log(`  docs/screenshots/${file}`);
 }
@@ -211,6 +213,16 @@ try {
 		path: `/?note=${noteIds['Seed order']}`,
 		// Show the backlinks list.
 		before: (page) => page.click('.backlinks .pill')
+	});
+	await capture(browser, base, token, {
+		file: 'settings.png',
+		width: 1100,
+		height: 700,
+		scale: 2,
+		theme: 'light',
+		mode: 'read',
+		path: '/settings',
+		fullPage: true
 	});
 	await capture(browser, base, token, { file: 'mobile-list.png', width: 390, height: 844, scale: 3, theme: 'light', mode: 'read', path: '/' });
 	await capture(browser, base, token, { file: 'mobile-note.png', width: 390, height: 844, scale: 3, theme: 'dark', mode: 'read', path: plan });

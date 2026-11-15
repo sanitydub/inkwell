@@ -15,12 +15,14 @@ interface UserRow {
 	id: string;
 	username: string;
 	password_hash: string;
+	is_admin: number;
 	created_at: number;
 }
 
-const toUser = (r: { id: string; username: string; created_at: number }): User => ({
+const toUser = (r: { id: string; username: string; is_admin: number; created_at: number }): User => ({
 	id: r.id,
 	username: r.username,
+	isAdmin: r.is_admin === 1,
 	createdAt: r.created_at
 });
 
@@ -63,32 +65,54 @@ export function registrationOpen(): boolean {
 	return ALLOW_REGISTRATION || userCount() === 0;
 }
 
+/** Validates a new password, with the field name used in error messages. */
+export function parsePassword(value: unknown, what = 'Passwords'): string {
+	if (typeof value !== 'string' || value.length < 8) error(400, `${what} need at least 8 characters.`);
+	if (value.length > 1024) error(400, `${what} can be at most 1024 characters.`);
+	return value;
+}
+
 export function parseNewCredentials(body: Record<string, unknown>) {
-	const { username, password } = body;
+	const { username } = body;
 	if (typeof username !== 'string' || !USERNAME_RE.test(username.trim())) {
 		error(400, 'Usernames are 3–32 characters: letters, numbers, dots, dashes and underscores.');
 	}
-	if (typeof password !== 'string' || password.length < 8) {
-		error(400, 'Passwords need at least 8 characters.');
-	}
-	if (password.length > 1024) error(400, 'Passwords can be at most 1024 characters.');
-	return { username: username.trim(), password };
+	return { username: username.trim(), password: parsePassword(body.password) };
 }
 
-export async function createUser(username: string, password: string): Promise<User> {
+/** Creates an account. The first account on the server is always an admin. */
+export async function createUser(username: string, password: string, isAdmin = false): Promise<User> {
 	const db = getDb();
 	if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) {
 		error(409, 'That username is taken. Try another one.');
 	}
-	const user: User = { id: randomUUID(), username, createdAt: Date.now() };
 	const hash = await hashPassword(password);
-	db.prepare('INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)').run(
+	const user: User = { id: randomUUID(), username, isAdmin: isAdmin || userCount() === 0, createdAt: Date.now() };
+	db.prepare('INSERT INTO users (id, username, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?)').run(
 		user.id,
 		user.username,
 		hash,
+		user.isAdmin ? 1 : 0,
 		user.createdAt
 	);
 	return user;
+}
+
+/** Replaces a user's password and signs out all their sessions except `keepToken`, if given. */
+export async function setPassword(userId: string, password: string, keepToken?: string) {
+	const hash = await hashPassword(password);
+	const db = getDb();
+	db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, userId);
+	db.prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?').run(userId, keepToken ? hashToken(keepToken) : '');
+}
+
+/** Checks a signed-in user's current password (for changing it). */
+export async function checkPassword(userId: string, password: unknown): Promise<boolean> {
+	if (typeof password !== 'string' || password.length > 1024) return false;
+	const row = getDb().prepare('SELECT password_hash FROM users WHERE id = ?').get(userId) as
+		| { password_hash: string }
+		| undefined;
+	return !!row && (await verifyPassword(password, row.password_hash));
 }
 
 export async function authenticate(username: unknown, password: unknown): Promise<User | null> {
@@ -128,11 +152,11 @@ export function validateSession(token: string) {
 	const db = getDb();
 	const row = db
 		.prepare(
-			`SELECT s.id AS sid, s.expires_at, u.id, u.username, u.created_at
+			`SELECT s.id AS sid, s.expires_at, u.id, u.username, u.is_admin, u.created_at
 			 FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`
 		)
 		.get(hashToken(token)) as
-		| { sid: string; expires_at: number; id: string; username: string; created_at: number }
+		| { sid: string; expires_at: number; id: string; username: string; is_admin: number; created_at: number }
 		| undefined;
 	if (!row) return null;
 
@@ -153,6 +177,22 @@ export function validateSession(token: string) {
 
 export function deleteSession(token: string) {
 	getDb().prepare('DELETE FROM sessions WHERE id = ?').run(hashToken(token));
+}
+
+/** How many signed-in sessions a user has besides the current one. */
+export function countOtherSessions(userId: string, currentToken: string): number {
+	const row = getDb()
+		.prepare('SELECT COUNT(*) AS n FROM sessions WHERE user_id = ? AND id != ? AND expires_at > ?')
+		.get(userId, hashToken(currentToken), Date.now()) as { n: number };
+	return Number(row.n);
+}
+
+/** Signs a user out everywhere except the current session. Returns how many were signed out. */
+export function deleteOtherSessions(userId: string, currentToken: string): number {
+	const res = getDb()
+		.prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?')
+		.run(userId, hashToken(currentToken));
+	return Number(res.changes);
 }
 
 // Secure cookies only over HTTPS, so plain-HTTP LAN installs can still sign in.
