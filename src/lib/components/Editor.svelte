@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Annotation, EditorState } from '@codemirror/state';
+	import { Annotation, EditorState, RangeSetBuilder } from '@codemirror/state';
 	import {
 		Decoration,
 		EditorView,
@@ -66,7 +66,7 @@
 		{ tag: t.link, color: 'var(--accent)' },
 		{ tag: t.url, color: 'var(--muted)' },
 		{ tag: t.quote, color: 'var(--muted)' },
-		{ tag: t.monospace, color: 'var(--syn-string)' },
+		{ tag: t.monospace, color: 'var(--syn-string)', fontFamily: 'var(--font-mono)', fontSize: '0.9em' },
 		{ tag: [t.processingInstruction, t.meta, t.contentSeparator], color: 'var(--faint)' },
 		{ tag: t.keyword, color: 'var(--syn-keyword)' },
 		{ tag: [t.string, t.special(t.string), t.regexp], color: 'var(--syn-string)' },
@@ -127,6 +127,44 @@
 			}
 			update(update: ViewUpdate) {
 				this.decorations = wikiLinkMatcher.updateDeco(update, this.decorations);
+			}
+		},
+		{ decorations: (plugin) => plugin.decorations }
+	);
+
+	// The editor writes in the note's sans serif; code blocks keep a monospace font so they line up.
+	const codeLine = Decoration.line({ class: 'cm-code-line' });
+	function codeLines(view: EditorView): DecorationSet {
+		const builder = new RangeSetBuilder<Decoration>();
+		let last = -1;
+		for (const { from, to } of view.visibleRanges) {
+			syntaxTree(view.state).iterate({
+				from,
+				to,
+				enter: (node) => {
+					if (node.name !== 'FencedCode' && node.name !== 'CodeBlock') return;
+					for (let pos = node.from; pos <= node.to; ) {
+						const line = view.state.doc.lineAt(pos);
+						if (line.from > last) builder.add(line.from, line.from, codeLine);
+						last = Math.max(last, line.from);
+						pos = line.to + 1;
+					}
+					return false;
+				}
+			});
+		}
+		return builder.finish();
+	}
+	const codeBlockFont = ViewPlugin.fromClass(
+		class {
+			decorations: DecorationSet;
+			constructor(view: EditorView) {
+				this.decorations = codeLines(view);
+			}
+			update(update: ViewUpdate) {
+				if (update.docChanged || update.viewportChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+					this.decorations = codeLines(update.view);
+				}
 			}
 		},
 		{ decorations: (plugin) => plugin.decorations }
@@ -220,11 +258,12 @@
 		'.cm-completionIcon': { display: 'none' },
 		'.cm-completionMatchedText': { textDecoration: 'none', fontWeight: '600' },
 		'.cm-tag': { color: 'var(--accent)', backgroundColor: 'var(--accent-soft)', borderRadius: '3px' },
-		'&': { height: '100%', color: 'var(--ink)', backgroundColor: 'transparent', fontSize: '15px' },
+		'&': { height: '100%', color: 'var(--ink)', backgroundColor: 'transparent', fontSize: '16px' },
+		'.cm-code-line': { fontFamily: 'var(--font-mono)', fontSize: '0.9em' },
 		'&.cm-focused': { outline: 'none' },
 		'.cm-scroller': {
-			fontFamily: 'var(--font-mono)',
-			lineHeight: '1.75',
+			fontFamily: 'var(--font-ui)',
+			lineHeight: '1.7',
 			paddingInline: 'var(--gutter)'
 		},
 		'.cm-content': { padding: '0.25rem 0 40vh', caretColor: 'var(--accent)' },
@@ -272,6 +311,7 @@
 					tagHighlighter,
 					wikiLinkHighlighter,
 					inlineStyles,
+					codeBlockFont,
 					followLinkOnModClick,
 					autocompletion({ override: [linkCompletions], icons: false }),
 					keymap.of([...formatKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
