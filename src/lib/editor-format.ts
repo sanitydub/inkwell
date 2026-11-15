@@ -2,7 +2,7 @@
 // Markdown text directly, so notes stay plain Markdown: underline is <u>…</u> and highlight is
 // ==…==, the two things Markdown itself has no syntax for.
 
-import { EditorSelection, type EditorState, type Line } from '@codemirror/state';
+import { EditorSelection, type ChangeSpec, type EditorState, type Line } from '@codemirror/state';
 import type { EditorView, KeyBinding } from '@codemirror/view';
 
 export type FormatCommand =
@@ -146,6 +146,20 @@ function selectedLines(state: EditorState): Line[] {
 	return nonBlank.length ? nonBlank : lines;
 }
 
+/**
+ * Applies line-prefix changes and moves cursors that sat at an insertion point to after the new
+ * marker. (By default the cursor stays in front of inserted text, so typing would land before "- ".)
+ */
+function dispatchLineChanges(view: EditorView, changes: ChangeSpec[]) {
+	const changeSet = view.state.changes(changes);
+	view.dispatch({
+		changes: changeSet,
+		selection: view.state.selection.map(changeSet, 1),
+		scrollIntoView: true,
+		userEvent: 'input.format'
+	});
+}
+
 function toggleLineKind(view: EditorView, kind: LineKind) {
 	const { state } = view;
 	const lines = selectedLines(state);
@@ -160,7 +174,7 @@ function toggleLineKind(view: EditorView, kind: LineKind) {
 		const insert = removing ? '' : kind === 'bullet' ? '- ' : kind === 'task' ? '- [ ] ' : `${i + 1}. `;
 		return { from: line.from + indent.length, to: line.from + marker.length, insert };
 	});
-	view.dispatch({ changes, scrollIntoView: true, userEvent: 'input.format' });
+	dispatchLineChanges(view, changes);
 }
 
 /** Sets the heading level of the selected lines; `cycle` steps H1 → H2 → H3 → normal text. */
@@ -174,7 +188,7 @@ function setHeading(view: EditorView, level: number | 'cycle') {
 		const existing = /^#{1,6}\s+/.exec(line.text)?.[0] ?? '';
 		return { from: line.from, to: line.from + existing.length, insert: next ? `${'#'.repeat(next)} ` : '' };
 	});
-	view.dispatch({ changes, scrollIntoView: true, userEvent: 'input.format' });
+	dispatchLineChanges(view, changes);
 }
 
 // ---- Blocks and links -----------------------------------------------------------------------

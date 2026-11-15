@@ -2,7 +2,6 @@
 	import { tick } from 'svelte';
 	import { ChevronDown, ChevronLeft, Download, Link2, Notebook as NotebookIcon, Pin, PinOff, RotateCcw, Trash2 } from '@lucide/svelte';
 	import Editor from './Editor.svelte';
-	import Preview from './Preview.svelte';
 	import FormatToolbar from './FormatToolbar.svelte';
 	import { longDate } from '#lib/format.ts';
 	import { extractTags } from '#lib/tags.ts';
@@ -16,22 +15,15 @@
 
 	let { ws, onback }: Props = $props();
 
-	type Mode = 'write' | 'split' | 'read';
-	const MODE_KEY = 'inkwell-mode';
-	const modes: { id: Mode; label: string }[] = [
-		{ id: 'write', label: 'Write' },
-		{ id: 'split', label: 'Split' },
-		{ id: 'read', label: 'Read' }
-	];
-
-	let mode = $state<Mode>(savedMode());
+	// One live view: you edit the formatted note. "Show Markdown" switches to plain source.
+	const SOURCE_KEY = 'inkwell-show-markdown';
+	let showMarkdown = $state(savedShowMarkdown());
 	let editor = $state<ReturnType<typeof Editor>>();
 	let titleInput = $state<HTMLInputElement>();
 
 	const note = $derived(ws.current);
 	// Worked out locally so chips update as you type; the server indexes the same thing on save.
 	const tags = $derived(note ? extractTags(note.content) : []);
-	const knownTitles = $derived(new Set(ws.titleIndex.keys()));
 	const linkTitles = () => ws.titles.map((t) => t.title);
 
 	// "Linked from" list: closes on outside click, Escape, or opening another note.
@@ -45,8 +37,6 @@
 	function closeBacklinksOnOutsideClick(e: MouseEvent) {
 		if (showBacklinks && backlinksBox && !backlinksBox.contains(e.target as Node)) showBacklinks = false;
 	}
-	// Notes in the trash are read-only, so show them rendered.
-	const shown = $derived<Mode>(note?.trashed ? 'read' : mode);
 
 	const status = $derived.by(() => {
 		if (!note) return '';
@@ -72,29 +62,27 @@
 		}
 	});
 
-	function savedMode(): Mode {
+	function savedShowMarkdown(): boolean {
 		try {
-			const m = localStorage.getItem(MODE_KEY);
-			if (m === 'write' || m === 'split' || m === 'read') return m;
+			return localStorage.getItem(SOURCE_KEY) === 'true';
 		} catch {
-			/* storage unavailable */
+			return false;
 		}
-		return 'write';
 	}
 
-	function setMode(m: Mode) {
-		mode = m;
+	function toggleShowMarkdown() {
+		showMarkdown = !showMarkdown;
 		try {
-			localStorage.setItem(MODE_KEY, m);
+			localStorage.setItem(SOURCE_KEY, String(showMarkdown));
 		} catch {
 			/* storage unavailable */
 		}
+		editor?.focus();
 	}
 
 	function onTitleKey(e: KeyboardEvent) {
 		if (e.key === 'Enter' || (e.key === 'ArrowDown' && !e.shiftKey)) {
 			e.preventDefault();
-			if (shown === 'read') setMode('write');
 			tick().then(() => editor?.focus());
 		}
 	}
@@ -119,7 +107,7 @@
 	onkeydown={(e) => e.key === 'Escape' && (showBacklinks = false)}
 />
 
-<section class="note-pane mode-{shown}" aria-label="Note">
+<section class="note-pane" aria-label="Note">
 	{#if note}
 		<header class="toolbar">
 			<button class="icon-btn back" onclick={onback} aria-label="Back to notes">
@@ -135,13 +123,6 @@
 					</button>
 					<button class="btn danger" onclick={confirmDelete}>Delete forever</button>
 				{:else}
-					<div class="modes" role="group" aria-label="Editor layout">
-						{#each modes as m (m.id)}
-							<button class="opt-{m.id}" aria-pressed={mode === m.id} onclick={() => setMode(m.id)}>
-								{m.label}
-							</button>
-						{/each}
-					</div>
 					<button
 						class="icon-btn"
 						aria-pressed={note.pinned}
@@ -229,33 +210,26 @@
 
 		<div class="body">
 			{#if !note.trashed}
-				<!-- Kept mounted while reading so undo history survives switching layouts. -->
-				<div class="write" hidden={shown === 'read'}>
-					<FormatToolbar onformat={(command) => editor?.format(command)} />
-					<div class="editor-area">
-						{#key note.id}
-							<Editor
-								bind:this={editor}
-								value={note.content}
-								titles={linkTitles}
-								onchange={(content) => ws.edit({ content })}
-								onopenlink={(title) => ws.openByTitle(title)}
-							/>
-						{/key}
-					</div>
-				</div>
+				<FormatToolbar
+					onformat={(command) => editor?.format(command)}
+					{showMarkdown}
+					ontogglemarkdown={toggleShowMarkdown}
+				/>
 			{/if}
-			{#if shown !== 'write'}
-				<div class="read">
-					<Preview
-						source={note.content}
-						{knownTitles}
-						ontag={(tag) => ws.showTag(tag)}
-						onlink={(title) => ws.openByTitle(title)}
-						ontoggletask={note.trashed ? undefined : (index) => ws.toggleTask(index)}
+			<div class="editor-area">
+				{#key `${note.id}:${note.trashed}`}
+					<Editor
+						bind:this={editor}
+						value={note.content}
+						readonly={note.trashed}
+						live={!showMarkdown}
+						titles={linkTitles}
+						onchange={(content) => ws.edit({ content })}
+						onopenlink={(title) => ws.openByTitle(title)}
+						onopentag={(tag) => ws.showTag(tag)}
 					/>
-				</div>
-			{/if}
+				{/key}
+			</div>
 		</div>
 	{:else}
 		<div class="placeholder">
@@ -306,31 +280,6 @@
 		align-items: center;
 		gap: 0.2rem;
 	}
-	.modes {
-		display: inline-flex;
-		gap: 2px;
-		margin-right: 0.5rem;
-		padding: 2px;
-		border: 1px solid var(--line);
-		border-radius: var(--radius);
-	}
-	.modes button {
-		height: 1.65rem;
-		padding: 0 0.65rem;
-		border: 0;
-		border-radius: 4px;
-		background: transparent;
-		color: var(--muted);
-		font-size: 0.8125rem;
-		font-weight: 500;
-	}
-	.modes button:hover {
-		color: var(--ink);
-	}
-	.modes button[aria-pressed='true'] {
-		background: var(--panel-strong);
-		color: var(--ink);
-	}
 
 	.banner {
 		flex: none;
@@ -345,9 +294,6 @@
 	.title-row {
 		flex: none;
 		padding: 1.75rem var(--gutter) 0.75rem;
-	}
-	.mode-split .title-row {
-		padding-inline: 1.5rem;
 	}
 	.title {
 		width: 100%;
@@ -373,9 +319,6 @@
 		align-items: center;
 		gap: 0.35rem;
 		padding: 0 var(--gutter) 1rem;
-	}
-	.mode-split .meta {
-		padding-inline: 1.5rem;
 	}
 	.notebook {
 		position: relative;
@@ -492,36 +435,12 @@
 	.body {
 		flex: 1;
 		min-height: 0;
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.mode-split .body {
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-	}
-	.write {
-		min-height: 0;
 		display: flex;
 		flex-direction: column;
 	}
 	.editor-area {
 		flex: 1;
 		min-height: 0;
-	}
-	.write[hidden] {
-		display: none;
-	}
-	.read {
-		min-height: 0;
-		overflow-y: auto;
-		padding: 0.25rem var(--gutter) 0;
-	}
-	.mode-split .read {
-		padding-inline: 1.5rem;
-		border-left: 1px solid var(--line);
-	}
-	/* The editor pads itself to the same column. */
-	.mode-split .write {
-		--gutter: 1.5rem;
 	}
 
 	.placeholder {
@@ -542,24 +461,8 @@
 		.toolbar {
 			padding-left: 0.75rem;
 		}
-		.modes .opt-split {
-			display: none;
-		}
-		.mode-split .body {
-			grid-template-columns: minmax(0, 1fr);
-		}
-		.mode-split .read {
-			display: none;
-		}
-		.mode-split .write {
-			--gutter: max(1.25rem, calc((100% - var(--doc-width)) / 2));
-		}
-		.title-row,
-		.mode-split .title-row {
+		.title-row {
 			padding: 1rem 1.25rem 0.5rem;
-		}
-		.read {
-			padding-inline: 1.25rem;
 		}
 	}
 </style>

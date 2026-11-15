@@ -162,18 +162,14 @@ async function seed(base) {
 	return { token, noteIds };
 }
 
-async function capture(browser, base, token, { file, width, height, scale, theme, mode, path, before, fullPage = false }) {
+async function capture(browser, base, token, { file, width, height, scale, theme, path, before, fullPage = false }) {
 	const page = await browser.newPage();
 	await page.setViewport({ width, height, deviceScaleFactor: scale, isMobile: width < 760, hasTouch: width < 760 });
 	await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: theme }]);
 	await page.setCookie({ name: 'inkwell_session', value: token, url: base });
 	await page.evaluateOnNewDocument(
-		(theme, mode) => {
-			localStorage.setItem('inkwell-theme', theme);
-			localStorage.setItem('inkwell-mode', mode);
-		},
-		theme,
-		mode
+		(theme) => localStorage.setItem('inkwell-theme', theme),
+		theme
 	);
 	await page.goto(`${base}${path}`, { waitUntil: 'networkidle0' });
 	await page.evaluate(() => document.fonts.ready);
@@ -204,14 +200,14 @@ try {
 	console.log(`Capturing with ${executablePath}:`);
 
 	const plan = `/?note=${noteIds['Spring planting plan']}`;
-	await capture(browser, base, token, { file: 'desktop-light.png', width: 1440, height: 860, scale: 2, theme: 'light', mode: 'split', path: plan });
+	await capture(browser, base, token, { file: 'desktop-light.png', width: 1440, height: 860, scale: 2, theme: 'light', path: plan });
 	await capture(browser, base, token, {
 		file: 'desktop-dark.png',
 		width: 1440,
 		height: 860,
 		scale: 2,
 		theme: 'dark',
-		mode: 'read',
+		
 		path: `/?note=${noteIds['Seed order']}`,
 		// Show the backlinks list.
 		before: (page) => page.click('.backlinks .pill')
@@ -222,12 +218,12 @@ try {
 		height: 700,
 		scale: 2,
 		theme: 'light',
-		mode: 'read',
+		
 		path: '/settings',
 		fullPage: true
 	});
-	await capture(browser, base, token, { file: 'mobile-list.png', width: 390, height: 844, scale: 3, theme: 'light', mode: 'read', path: '/' });
-	await capture(browser, base, token, { file: 'mobile-note.png', width: 390, height: 844, scale: 3, theme: 'dark', mode: 'read', path: plan });
+	await capture(browser, base, token, { file: 'mobile-list.png', width: 390, height: 844, scale: 3, theme: 'light', path: '/' });
+	await capture(browser, base, token, { file: 'mobile-note.png', width: 390, height: 844, scale: 3, theme: 'dark', path: plan });
 } finally {
 	await browser?.close();
 	server.kill();

@@ -2,6 +2,7 @@
 	import {
 		Bold,
 		Code,
+		FileCode,
 		Heading,
 		Highlighter,
 		Italic,
@@ -16,7 +17,14 @@
 	} from '@lucide/svelte';
 	import { shortcutLabel, type FormatCommand } from '#lib/editor-format.ts';
 
-	let { onformat }: { onformat: (command: FormatCommand) => void } = $props();
+	interface Props {
+		onformat: (command: FormatCommand) => void;
+		/** Whether the editor shows plain Markdown instead of the live view. */
+		showMarkdown?: boolean;
+		ontogglemarkdown?: () => void;
+	}
+
+	let { onformat, showMarkdown = false, ontogglemarkdown }: Props = $props();
 
 	// Groups are separated by a thin divider: text styles, structure, lists, inserts.
 	const groups: { command: FormatCommand; label: string; icon: typeof Bold }[][] = [
@@ -64,6 +72,18 @@
 			</button>
 		{/each}
 	{/each}
+	{#if ontogglemarkdown}
+		<button
+			class="icon-btn source"
+			aria-pressed={showMarkdown}
+			aria-label="Show Markdown"
+			title={showMarkdown ? 'Back to the formatted view' : 'Show Markdown'}
+			onmousedown={(e) => e.preventDefault()}
+			onclick={ontogglemarkdown}
+		>
+			<FileCode size={16} strokeWidth={2} />
+		</button>
+	{/if}
 </div>
 
 <style>
@@ -89,6 +109,14 @@
 		flex: none;
 		width: 1.9rem;
 		height: 1.9rem;
+	}
+	/* The view toggle sits apart from the formatting buttons, at the far end. */
+	.source {
+		margin-left: auto;
+	}
+	.source[aria-pressed='true'] {
+		background: var(--accent-soft);
+		color: var(--accent);
 	}
 	.divider {
 		flex: none;

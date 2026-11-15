@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Annotation, EditorState, RangeSetBuilder } from '@codemirror/state';
+	import { Annotation, Compartment, EditorState, RangeSetBuilder } from '@codemirror/state';
 	import {
 		Decoration,
 		EditorView,
@@ -29,6 +29,7 @@
 	import { tagRegExp } from '#lib/tags.ts';
 	import { linkRegExp, linkTarget } from '#lib/links.ts';
 	import { applyFormat, formatKeymap, type FormatCommand } from '#lib/editor-format.ts';
+	import { livePreview } from '#lib/live-preview.ts';
 
 	interface Props {
 		value: string;
@@ -36,11 +37,24 @@
 		onchange?: (value: string) => void;
 		/** Note titles to suggest after typing "[[". A function so the list stays current. */
 		titles?: () => string[];
-		/** Called with a link's target title on Ctrl/⌘+click. */
+		/** Called with a link's target title (Ctrl/⌘+click, or a plain click in the live view). */
 		onopenlink?: (title: string) => void;
+		/** Called with a tag when it's clicked in the live view. */
+		onopentag?: (tag: string) => void;
+		/** Live view (formatted, Markdown hidden) or plain Markdown source. */
+		live?: boolean;
 	}
 
-	let { value, readonly = false, onchange, titles, onopenlink }: Props = $props();
+	let { value, readonly = false, onchange, titles, onopenlink, onopentag, live = true }: Props = $props();
+
+	// The live view can be switched on and off without recreating the editor.
+	const liveMode = new Compartment();
+	const liveExtension = () =>
+		live ? livePreview({ onOpenLink: (title) => onopenlink?.(title), onOpenTag: (tag) => onopentag?.(tag) }) : [];
+	$effect(() => {
+		const extension = liveExtension();
+		view?.dispatch({ effects: liveMode.reconfigure(extension) });
+	});
 
 	let host: HTMLDivElement;
 	let view: EditorView | undefined;
@@ -57,8 +71,8 @@
 	}
 
 	const highlight = HighlightStyle.define([
-		{ tag: t.heading1, fontSize: '1.3em', fontWeight: '600' },
-		{ tag: t.heading2, fontSize: '1.15em', fontWeight: '600' },
+		{ tag: t.heading1, fontWeight: '700' },
+		{ tag: t.heading2, fontWeight: '650' },
 		{ tag: [t.heading3, t.heading4, t.heading5, t.heading6], fontWeight: '600' },
 		{ tag: t.strong, fontWeight: '600' },
 		{ tag: t.emphasis, fontStyle: 'italic' },
@@ -176,7 +190,9 @@
 	const inlineStyleMatcher = new MatchDecorator({
 		regexp: /==(?!=)(?=\S)(?:.*?\S)==(?!=)|<u>.+?<\/u>/g,
 		decorate: (add, from, to, match, view) => {
-			if (!inCodeOrLink(view, from, false)) add(from, to, match[0].startsWith('==') ? highlightMark : underlineMark);
+			// For <u>…</u>, check the text inside: the tag itself counts as HTML.
+			const isHighlight = match[0].startsWith('==');
+			if (!inCodeOrLink(view, isHighlight ? from : from + 3, false)) add(from, to, isHighlight ? highlightMark : underlineMark);
 		}
 	});
 	const inlineStyles = ViewPlugin.fromClass(
@@ -318,6 +334,7 @@
 					placeholder('Start writing. Markdown works here.'),
 					EditorState.readOnly.of(readonly),
 					EditorView.editable.of(!readonly),
+					liveMode.of(liveExtension()),
 					EditorView.contentAttributes.of({ 'aria-label': 'Note text', spellcheck: 'true' }),
 					EditorView.updateListener.of((update) => {
 						if (!update.docChanged || update.transactions.some((t) => t.annotation(fromOutside))) return;

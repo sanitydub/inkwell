@@ -1,14 +1,14 @@
 # Inkwell
 
-A simple note-taking app you host yourself. Write in Markdown with a live preview, find anything with full-text search, and keep everything in a single SQLite file on your own server.
+A simple note-taking app you host yourself. Write in a live view that formats as you type (and stays plain Markdown underneath), find anything with full-text search, and keep everything in a single SQLite file on your own server.
 
-![Inkwell on desktop: the note list, notebooks and tags in the sidebar, and a note open in Split view with Markdown on the left and the rendered note on the right](docs/screenshots/desktop-light.png)
+![Inkwell on desktop: the note list, notebooks and tags in the sidebar, and a note open in the live view with its formatting toolbar](docs/screenshots/desktop-light.png)
 
 | Dark theme, with a note’s backlinks open | On a phone |
 | --- | --- |
-| <img src="docs/screenshots/desktop-dark.png" alt="Inkwell in dark mode, showing a note in Read view with its Linked from list open"> | <img src="docs/screenshots/mobile-list.png" alt="The note list on a phone" width="150"> <img src="docs/screenshots/mobile-note.png" alt="A note open on a phone, in dark mode" width="150"> |
+| <img src="docs/screenshots/desktop-dark.png" alt="Inkwell in dark mode, showing a note with its Linked from list open"> | <img src="docs/screenshots/mobile-list.png" alt="The note list on a phone" width="150"> <img src="docs/screenshots/mobile-note.png" alt="A note open on a phone, in dark mode" width="150"> |
 
-- Markdown editor (CodeMirror) with Write, Split and Read layouts; tick `- [ ]` tasks right in the rendered note
+- One live view: you edit the formatted note directly, like Obsidian's Live Preview. Markdown symbols show only on the line you're editing, checkboxes tick with a click, and links and tags open with a click. **Show Markdown** on the toolbar switches to plain source.
 - Formatting toolbar and shortcuts: bold, italic, underline, strikethrough, highlight, headings, bulleted/numbered/task lists, quotes, code, links and tables
 - Full-text search with prefix matching
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
@@ -89,7 +89,7 @@ Notes are Markdown, and the toolbar above the editor writes it for you. Click a 
 | Bulleted / numbered / task list | Ctrl+Shift+8 / 7 / 9 | `- `, `1. `, `- [ ] ` |
 | Link | Ctrl+K (in the editor) | `[text](https://…)` |
 
-Each line break shows as a new line in the rendered note, as in Obsidian; leave a blank line to start a new paragraph. On a Mac, use ⌘ instead of Ctrl. Quotes and tables are on the toolbar. Underline and highlight use the same syntax as Obsidian, so notes move between the two cleanly; Word imports keep both.
+Each line break shows as a new line, as in Obsidian; leave a blank line to start a new paragraph. On a Mac, use ⌘ instead of Ctrl. Quotes and tables are on the toolbar. Underline and highlight use the same syntax as Obsidian, so notes move between the two cleanly; Word imports keep both.
 
 ## Accounts
 

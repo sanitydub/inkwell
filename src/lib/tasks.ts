@@ -25,10 +25,3 @@ export function findTasks(markdown: string): TaskMark[] {
 	}
 	return tasks;
 }
-
-/** The Markdown with task number `index` ticked or unticked, or null if there's no such task. */
-export function toggleTask(markdown: string, index: number): string | null {
-	const task = findTasks(markdown)[index];
-	if (!task) return null;
-	return markdown.slice(0, task.offset) + (task.checked ? ' ' : 'x') + markdown.slice(task.offset + 1);
-}
