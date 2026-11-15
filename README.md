@@ -14,7 +14,7 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 - `[[Wiki-links]]` between notes with title suggestions as you type, a “Linked from” list of backlinks on every note, and an offer to update links when you rename a note
 - Pin notes, move them to the trash, restore them, or delete them for good
 - Download any note as a `.md` file, or export everything as a zip (one folder per notebook)
-- Import Markdown files or a zip, such as an Obsidian vault, a Joplin Markdown export, or an Inkwell export
+- Import Markdown and Word (.docx) files, or a zip of them, such as an Obsidian vault, a Joplin Markdown export, or an Inkwell export
 - Sign-in and sign-up rate limiting
 - Multiple accounts per server, each with private notes; admins add, reset and remove accounts from Settings
 - Change your password and sign out other devices from Settings
@@ -87,11 +87,12 @@ Admins also see **People on this server**, where they can:
 
 ## Importing notes
 
-Use **Import** at the bottom of the sidebar to bring in `.md` or `.txt` files, or `.zip` archives of them:
+Use **Import** at the bottom of the sidebar to bring in `.md`, `.txt` or Word `.docx` files, or `.zip` archives of them:
 
 - Each file becomes a note. Its title comes from the YAML front matter (`title:`) if there is one, otherwise from the file name. `created`, `updated` and `pinned` in the front matter are kept too.
 - Folders become notebooks. Nested folders get a combined name like “Projects / Atlas”, and a single folder wrapping the whole zip is ignored. Files go into an existing notebook if one has the same name.
 - Front matter with anything beyond those keys (Obsidian `aliases`, `tags:` lists, …) stays in the note so nothing is lost.
+- Word documents are converted to Markdown: headings, bold, italic and strikethrough, links, bulleted and numbered lists (nested too), quotes and tables come across. The note's title is the document's Title (from its properties or a Title-styled first line), otherwise the file name. Images, comments and footnotes are left out, and tracked changes are imported as accepted.
 - Images, attachments and app folders like `.obsidian/` are skipped.
 - Importing the same files twice creates duplicates.
 
@@ -160,7 +161,7 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `DELETE` | `/api/notebooks/:id`  | its notes are kept, without a notebook        |
 | `GET`    | `/api/tags`           | tags in use, with note counts                 |
 | `GET`    | `/api/export`         | zip of all notes outside the trash            |
-| `POST`   | `/api/import`         | multipart form data, one or more `files` (.md, .txt, .zip) |
+| `POST`   | `/api/import`         | multipart form data, one or more `files` (.md, .txt, .docx, .zip) |
 | `GET`    | `/api/titles`         | every note title (for resolving links)        |
 | `GET`    | `/api/notes/:id/backlinks` | notes that `[[link]]` here, with the linking line |
 | `GET`    | `/api/notes/:id/relink` | `?from=<old title>`: notes whose links would move to this note's current title |

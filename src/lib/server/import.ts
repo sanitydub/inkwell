@@ -1,6 +1,7 @@
 import { transaction } from './db';
 import { findOrCreateNotebook } from './notebooks';
 import { insertImportedNote, MAX_CONTENT, MAX_TITLE } from './notes';
+import { docxToMarkdown, DocxError } from './docx';
 
 export interface ImportFile {
 	/** Path relative to the import root, e.g. "Work/Ideas.md". */
@@ -18,10 +19,12 @@ export interface ImportResult {
 }
 
 const NOTE_FILE = /\.(md|markdown|mdown|mkd|txt)$/i;
+const WORD_FILE = /\.docx$/i;
 const MAX_NOTEBOOK_NAME = 100;
 
-/** True for files to ignore silently: app settings, macOS metadata, hidden files. */
-export const isJunk = (path: string) => path.split('/').some((part) => part.startsWith('.') || part === '__MACOSX');
+/** True for files to ignore silently: app settings, macOS metadata, hidden files, Word lock files ("~$…"). */
+export const isJunk = (path: string) =>
+	path.split('/').some((part) => part.startsWith('.') || part.startsWith('~$') || part === '__MACOSX');
 
 /** Drops a single folder that wraps everything (zipping a folder usually adds one). */
 export function stripCommonRoot<T extends { path: string }>(files: T[]): T[] {
@@ -86,20 +89,37 @@ export function importNotes(userId: string, files: ImportFile[], alreadySkipped:
 
 	for (const file of files) {
 		if (isJunk(file.path)) continue;
-		if (!NOTE_FILE.test(file.path)) {
-			skipped.push(`${file.path} (not a Markdown file)`);
+		const isWord = WORD_FILE.test(file.path);
+		if (!isWord && !NOTE_FILE.test(file.path)) {
+			skipped.push(`${file.path} (not a Markdown, text or Word file)`);
 			continue;
 		}
-		const text = file.data.toString('utf8').replace(/^﻿/, '');
-		const { meta, body: withNewline } = parseFrontMatter(text);
-		// Files end with a newline by convention (Inkwell's export adds one); notes don't need it.
-		const body = withNewline.replace(/\r?\n$/, '');
+
+		let meta: FrontMatter = {};
+		let body: string;
+		if (isWord) {
+			try {
+				const converted = docxToMarkdown(file.data);
+				body = converted.markdown;
+				if (converted.title) meta = { title: converted.title };
+			} catch (err) {
+				if (!(err instanceof DocxError)) throw err;
+				skipped.push(`${file.path} (${err.message.replace(/\.$/, '')})`);
+				continue;
+			}
+		} else {
+			const text = file.data.toString('utf8').replace(/^\uFEFF/, '');
+			const parsed = parseFrontMatter(text);
+			meta = parsed.meta;
+			// Files end with a newline by convention (Inkwell's export adds one); notes don't need it.
+			body = parsed.body.replace(/\r?\n$/, '');
+		}
 		if (body.length > MAX_CONTENT) {
 			skipped.push(`${file.path} (too long)`);
 			continue;
 		}
 		const parts = file.path.split('/');
-		const fileName = parts.pop()!.replace(NOTE_FILE, '');
+		const fileName = parts.pop()!.replace(isWord ? WORD_FILE : NOTE_FILE, '');
 		const folders = parts.filter(Boolean).join(' / ');
 		notes.push({
 			title: (meta.title ?? fileName).slice(0, MAX_TITLE),

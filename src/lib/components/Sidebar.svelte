@@ -214,7 +214,7 @@
 				onclick={() => fileInput?.click()}
 				disabled={ws.importing}
 				aria-label="Import notes"
-				title="Import Markdown files or a zip"
+				title="Import Markdown, Word (.docx) or zip files"
 			>
 				<FileUp size={16} />
 			</button>
@@ -223,7 +223,7 @@
 				type="file"
 				multiple
 				hidden
-				accept=".md,.markdown,.txt,.zip,text/markdown,text/plain,application/zip"
+				accept=".md,.markdown,.txt,.docx,.zip,text/markdown,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip"
 				onchange={(e) => {
 					ws.importFiles([...(e.currentTarget.files ?? [])]);
 					e.currentTarget.value = '';

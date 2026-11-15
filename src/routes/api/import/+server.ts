@@ -4,7 +4,7 @@ import { requireUser } from '#lib/server/http.ts';
 import { importNotes, isJunk, stripCommonRoot, type ImportFile } from '#lib/server/import.ts';
 import { readZip, ZipError } from '#lib/server/unzip.ts';
 
-// POST /api/import (multipart/form-data, one or more "files"): .md/.txt files and .zip archives.
+// POST /api/import (multipart/form-data, one or more "files"): .md/.txt and Word .docx files, and .zip archives of them.
 // Folders inside a zip become notebooks.
 export const POST: RequestHandler = async (event) => {
 	const user = requireUser(event);
@@ -16,7 +16,7 @@ export const POST: RequestHandler = async (event) => {
 		error(400, 'Send the files as multipart form data, in a field named "files".');
 	}
 	const uploads = form.getAll('files').filter((f): f is File => f instanceof File && f.size > 0);
-	if (!uploads.length) error(400, 'Choose at least one Markdown (.md) or .zip file to import.');
+	if (!uploads.length) error(400, 'Choose at least one Markdown (.md), Word (.docx) or .zip file to import.');
 
 	const files: ImportFile[] = [];
 	const skipped: string[] = [];

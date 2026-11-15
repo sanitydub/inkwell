@@ -474,12 +474,12 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 function describeImport({ imported, notebooksCreated, skipped }: ImportResult): string {
 	if (!imported) {
 		return skipped.length
-			? `Nothing imported. None of the ${plural(skipped.length, 'file')} were Markdown (.md or .txt).`
-			: 'Nothing imported. No Markdown (.md or .txt) files were found.';
+			? `Nothing imported. Inkwell couldn’t use any of the ${plural(skipped.length, 'file')}: it imports Markdown (.md), text (.txt) and Word (.docx) files.`
+			: 'Nothing imported. No Markdown, text or Word files were found.';
 	}
 	let text = `Imported ${plural(imported, 'note')}`;
 	if (notebooksCreated.length) text += ` into ${plural(notebooksCreated.length, 'new notebook')}`;
 	text += '.';
-	if (skipped.length) text += ` Skipped ${plural(skipped.length, 'file')} that ${skipped.length === 1 ? 'isn’t' : 'aren’t'} Markdown.`;
+	if (skipped.length) text += ` Skipped ${plural(skipped.length, 'file')} Inkwell can’t import.`;
 	return text;
 }
