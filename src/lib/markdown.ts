@@ -4,7 +4,9 @@ import { normalizeTag, tagRegExp } from './tags';
 import { linkRegExp, linkTarget, normalizeTitle } from './links';
 import { findTasks } from './tasks';
 
-const marked = new Marked({ gfm: true, breaks: false });
+// breaks: a single line break shows as a new line (as in Obsidian), instead of Markdown's usual
+// rule that lines only separate when there's a blank line between them.
+const marked = new Marked({ gfm: true, breaks: true });
 
 // ==Highlighted text== (Obsidian's syntax) renders as <mark>. Underline needs no extension:
 // it's written as <u>…</u>, which Markdown passes through as HTML.
@@ -70,6 +72,7 @@ export function renderMarkdown(
 			// Label each box with its own item's text, leaving out any nested sub-items.
 			const item = box.closest('li')?.cloneNode(true) as HTMLElement | undefined;
 			item?.querySelectorAll('ul, ol').forEach((list) => list.remove());
+			item?.querySelectorAll('br').forEach((br) => br.replaceWith(' '));
 			const label = item?.textContent?.trim().replace(/\s+/g, ' ');
 			if (label) box.setAttribute('aria-label', label.slice(0, 120));
 		});

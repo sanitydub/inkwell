@@ -89,7 +89,7 @@ Notes are Markdown, and the toolbar above the editor writes it for you. Click a 
 | Bulleted / numbered / task list | Ctrl+Shift+8 / 7 / 9 | `- `, `1. `, `- [ ] ` |
 | Link | Ctrl+K (in the editor) | `[text](https://…)` |
 
-On a Mac, use ⌘ instead of Ctrl. Quotes and tables are on the toolbar. Underline and highlight use the same syntax as Obsidian, so notes move between the two cleanly; Word imports keep both.
+Each line break shows as a new line in the rendered note, as in Obsidian; leave a blank line to start a new paragraph. On a Mac, use ⌘ instead of Ctrl. Quotes and tables are on the toolbar. Underline and highlight use the same syntax as Obsidian, so notes move between the two cleanly; Word imports keep both.
 
 ## Accounts
 
