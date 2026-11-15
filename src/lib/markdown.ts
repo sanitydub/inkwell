@@ -2,8 +2,18 @@ import { Marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { normalizeTag, tagRegExp } from './tags';
 import { linkRegExp, linkTarget, normalizeTitle } from './links';
+import { findTasks } from './tasks';
 
 const marked = new Marked({ gfm: true, breaks: false });
+
+// Mark the checkboxes Markdown task lists produce, so they can't be confused with <input>s in raw HTML.
+marked.use({
+	renderer: {
+		checkbox({ checked }) {
+			return `<input type="checkbox" data-task=""${checked ? ' checked=""' : ''} disabled=""> `;
+		}
+	}
+});
 
 // Links in notes open in a new tab and don't leak the app's URL.
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
@@ -15,12 +25,32 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 
 /**
  * Renders untrusted Markdown to sanitised HTML. [[Links]] and #tags become buttons
- * (data-link / data-tag) that the preview handles. Browser only.
+ * (data-link / data-tag) that the preview handles; with tickableTasks, task checkboxes
+ * are enabled and numbered (data-task). Browser only.
  * @param knownTitles normalized titles of existing notes; links to anything else are marked "missing".
  */
-export function renderMarkdown(source: string, knownTitles: ReadonlySet<string> = new Set()): string {
+export function renderMarkdown(
+	source: string,
+	knownTitles: ReadonlySet<string> = new Set(),
+	{ tickableTasks = false } = {}
+): string {
 	const html = marked.parse(source, { async: false });
 	const fragment = DOMPurify.sanitize(html, { ADD_ATTR: ['target'], RETURN_DOM_FRAGMENT: true });
+
+	// Number task checkboxes so a click can be mapped back to its line. If the count doesn't match
+	// what's in the source (unusual Markdown), leave them read-only rather than tick the wrong line.
+	const boxes = [...fragment.querySelectorAll<HTMLInputElement>('input[data-task]')];
+	if (tickableTasks && boxes.length === findTasks(source).length) {
+		boxes.forEach((box, i) => {
+			box.removeAttribute('disabled');
+			box.dataset.task = String(i);
+			// Label each box with its own item's text, leaving out any nested sub-items.
+			const item = box.closest('li')?.cloneNode(true) as HTMLElement | undefined;
+			item?.querySelectorAll('ul, ol').forEach((list) => list.remove());
+			const label = item?.textContent?.trim().replace(/\s+/g, ' ');
+			if (label) box.setAttribute('aria-label', label.slice(0, 120));
+		});
+	}
 
 	replaceInText(fragment, linkRegExp, (match) => {
 		const target = linkTarget(match[1]);

@@ -7,13 +7,22 @@
 		knownTitles?: ReadonlySet<string>;
 		ontag?: (tag: string) => void;
 		onlink?: (title: string) => void;
+		/** Called with a task's number when its checkbox is clicked. Without it, checkboxes are read-only. */
+		ontoggletask?: (index: number) => void;
 	}
 
-	let { source, knownTitles, ontag, onlink }: Props = $props();
+	let { source, knownTitles, ontag, onlink, ontoggletask }: Props = $props();
 
-	const html = $derived(renderMarkdown(source, knownTitles));
+	const html = $derived(renderMarkdown(source, knownTitles, { tickableTasks: !!ontoggletask }));
 
 	function onclick(e: MouseEvent) {
+		const box = (e.target as Element).closest<HTMLInputElement>('input[data-task]');
+		if (box && box.dataset.task) {
+			// The note's Markdown changes and the preview re-renders with the new state.
+			e.preventDefault();
+			ontoggletask?.(Number(box.dataset.task));
+			return;
+		}
 		const button = (e.target as Element).closest<HTMLElement>('button[data-tag], button[data-link]');
 		if (button?.dataset.tag) ontag?.(button.dataset.tag);
 		else if (button?.dataset.link) onlink?.(button.dataset.link);
@@ -83,6 +92,13 @@
 	.prose :global(li:has(> input[type='checkbox'])) {
 		list-style: none;
 		margin-left: -1.4em;
+	}
+	.prose :global(input[data-task]:not(:disabled)) {
+		cursor: pointer;
+	}
+	.prose :global(li:has(> input[data-task]:checked)),
+	.prose :global(li:has(> p > input[data-task]:checked)) {
+		color: var(--muted);
 	}
 	.prose :global(input[type='checkbox']) {
 		accent-color: var(--accent);

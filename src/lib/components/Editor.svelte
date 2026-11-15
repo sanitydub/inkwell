@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { EditorState } from '@codemirror/state';
+	import { Annotation, EditorState } from '@codemirror/state';
 	import {
 		Decoration,
 		EditorView,
@@ -247,13 +247,37 @@
 					EditorView.editable.of(!readonly),
 					EditorView.contentAttributes.of({ 'aria-label': 'Note text', spellcheck: 'true' }),
 					EditorView.updateListener.of((update) => {
-						if (update.docChanged) onchange?.(update.state.doc.toString());
+						if (!update.docChanged || update.transactions.some((t) => t.annotation(fromOutside))) return;
+						onchange?.(update.state.doc.toString());
 					}),
 					theme
 				]
 			})
 		});
 		return () => view?.destroy();
+	});
+
+	// Changes made outside the editor (like ticking a checkbox in the preview) are applied as the
+	// smallest possible edit, so the cursor stays put and Ctrl+Z undoes them like typing.
+	const fromOutside = Annotation.define<boolean>();
+
+	$effect(() => {
+		const next = value;
+		if (!view) return;
+		const current = view.state.doc.toString();
+		if (next === current) return;
+		let start = 0;
+		while (start < next.length && start < current.length && next[start] === current[start]) start++;
+		let endCurrent = current.length;
+		let endNext = next.length;
+		while (endCurrent > start && endNext > start && current[endCurrent - 1] === next[endNext - 1]) {
+			endCurrent--;
+			endNext--;
+		}
+		view.dispatch({
+			changes: { from: start, to: endCurrent, insert: next.slice(start, endNext) },
+			annotations: fromOutside.of(true)
+		});
 	});
 </script>
 

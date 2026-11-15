@@ -246,6 +246,7 @@
 						{knownTitles}
 						ontag={(tag) => ws.showTag(tag)}
 						onlink={(title) => ws.openByTitle(title)}
+						ontoggletask={note.trashed ? undefined : (index) => ws.toggleTask(index)}
 					/>
 				</div>
 			{/if}

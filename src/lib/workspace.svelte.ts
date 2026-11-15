@@ -1,6 +1,7 @@
 import { api, ApiError, type ImportResult } from './api';
 import { snippetFrom } from './snippet';
 import { normalizeTitle } from './links';
+import { toggleTask } from './tasks';
 import type { Backlink, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, View } from './types';
 
 export type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
@@ -214,6 +215,14 @@ export class Workspace {
 		this.saveState = 'pending';
 		clearTimeout(this.#saveTimer);
 		this.#saveTimer = setTimeout(() => this.flush(), SAVE_DELAY);
+	}
+
+	/** Ticks or unticks task number `index` (from the preview's checkboxes) and saves it like any edit. */
+	toggleTask(index: number) {
+		const note = this.current;
+		if (!note || note.trashed) return;
+		const content = toggleTask(note.content, index);
+		if (content !== null) this.edit({ content });
 	}
 
 	/** Saves any pending edits now. Saves run one at a time, in order. */

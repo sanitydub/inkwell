@@ -8,7 +8,7 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 | --- | --- |
 | <img src="docs/screenshots/desktop-dark.png" alt="Inkwell in dark mode, showing a note in Read view with its Linked from list open"> | <img src="docs/screenshots/mobile-list.png" alt="The note list on a phone" width="150"> <img src="docs/screenshots/mobile-note.png" alt="A note open on a phone, in dark mode" width="150"> |
 
-- Markdown editor (CodeMirror) with Write, Split and Read layouts
+- Markdown editor (CodeMirror) with Write, Split and Read layouts; tick `- [ ]` tasks right in the rendered note
 - Full-text search with prefix matching
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
 - `[[Wiki-links]]` between notes with title suggestions as you type, plus a “Linked from” list of backlinks on every note
