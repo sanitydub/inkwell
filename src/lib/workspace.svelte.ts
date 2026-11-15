@@ -1,6 +1,6 @@
 import { api, ApiError, type ImportResult } from './api';
 import { snippetFrom } from './snippet';
-import { normalizeTitle } from './links';
+import { isLinkableTitle, normalizeTitle } from './links';
 import { toggleTask } from './tasks';
 import type { Backlink, Note, Notebook, NotePatch, NoteSummary, NoteTitle, TagCount, View } from './types';
 
@@ -37,6 +37,9 @@ export class Workspace {
 		return index;
 	});
 
+	/** Offered after a rename when other notes still link to the old title. */
+	renameOffer = $state<{ noteId: string; from: string; to: string; count: number } | null>(null);
+
 	current = $state<Note | null>(null);
 	/** Notes that link to the open note. */
 	backlinks = $state<Backlink[]>([]);
@@ -52,6 +55,13 @@ export class Workspace {
 	#listSeq = 0;
 	/** The open note's title as last saved, to notice renames (which change titles and backlinks). */
 	#savedTitle = '';
+	/** The title when the title field got focus, to spot a rename once it loses focus. */
+	#titleBeforeEdit: { id: string; title: string } | null = null;
+	/**
+	 * Per note, the last title other notes could link to, kept while a note has a title that can't be
+	 * linked to (e.g. it contains "|"), so renaming it again still offers to move those links.
+	 */
+	#linkableTitleBefore = new Map<string, string>();
 
 	get hasUnsavedChanges() {
 		return this.#dirty;
@@ -215,6 +225,65 @@ export class Workspace {
 		this.saveState = 'pending';
 		clearTimeout(this.#saveTimer);
 		this.#saveTimer = setTimeout(() => this.flush(), SAVE_DELAY);
+	}
+
+	// ---- Renames ------------------------------------------------------------
+	// The title autosaves as you type, so a rename is judged from focus to blur of the title field,
+	// not per save; otherwise half-typed titles would trigger offers.
+
+	beginTitleEdit() {
+		const note = this.current;
+		if (note) this.#titleBeforeEdit = { id: note.id, title: this.#linkableTitleBefore.get(note.id) ?? this.#savedTitle };
+	}
+
+	async endTitleEdit() {
+		const before = this.#titleBeforeEdit;
+		const note = this.current;
+		this.#titleBeforeEdit = null;
+		if (!before || !note || note.id !== before.id) return;
+		const to = note.title.trim();
+		if (normalizeTitle(before.title) === normalizeTitle(to) || !normalizeTitle(before.title)) {
+			this.#linkableTitleBefore.delete(before.id);
+			return;
+		}
+		if (!isLinkableTitle(to)) {
+			this.#linkableTitleBefore.set(before.id, before.title);
+			return;
+		}
+		this.#linkableTitleBefore.delete(before.id);
+		await this.flush();
+		try {
+			const { notes } = await api.relinkCandidates(before.id, before.title);
+			if (notes.length) this.renameOffer = { noteId: before.id, from: before.title.trim(), to, count: notes.length };
+		} catch {
+			// Only an offer; nothing to report if it can't be made.
+		}
+	}
+
+	dismissRenameOffer() {
+		this.renameOffer = null;
+	}
+
+	async acceptRenameOffer() {
+		const offer = this.renameOffer;
+		if (!offer) return;
+		this.renameOffer = null;
+		await this.flush();
+		try {
+			const { updated } = await api.relink(offer.noteId, offer.from);
+			// If the open note was one of them, show its updated text (the editor applies the change).
+			const open = this.current;
+			if (open && updated.some((n) => n.id === open.id)) {
+				if (this.#dirty) await this.flush();
+				const fresh = await api.getNote(open.id);
+				if (this.current?.id === open.id) Object.assign(this.current, { content: fresh.content, updatedAt: fresh.updatedAt });
+			}
+			await Promise.all([this.refresh(), this.refreshTitles()]);
+			this.#loadBacklinks();
+			this.message = `Updated links in ${plural(updated.length, 'note')}.`;
+		} catch (err) {
+			this.#fail(err);
+		}
 	}
 
 	/** Ticks or unticks task number `index` (from the preview's checkboxes) and saves it like any edit. */

@@ -173,6 +173,8 @@
 				aria-label="Title"
 				readonly={note.trashed}
 				oninput={(e) => ws.edit({ title: e.currentTarget.value })}
+				onfocus={() => ws.beginTitleEdit()}
+				onblur={() => ws.endTitleEdit()}
 				onkeydown={onTitleKey}
 			/>
 		</div>

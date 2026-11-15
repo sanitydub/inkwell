@@ -89,12 +89,27 @@
 	</main>
 </div>
 
-{#if ws.message}
-	<div class="toast" role="alert">
-		<span>{ws.message}</span>
-		<button class="icon-btn" aria-label="Dismiss" onclick={() => (ws.message = null)}><X size={16} /></button>
-	</div>
-{/if}
+<div class="toasts">
+	{#if ws.renameOffer}
+		{@const offer = ws.renameOffer}
+		<div class="toast" role="status">
+			<span>
+				{offer.count === 1 ? '1 note links' : `${offer.count} notes link`} to “{offer.from}”. Point
+				{offer.count === 1 ? 'it' : 'them'} at “{offer.to}” instead?
+			</span>
+			<button class="toast-action" onclick={() => ws.acceptRenameOffer()}>Update links</button>
+			<button class="icon-btn" aria-label="Keep the old links" title="Keep the old links" onclick={() => ws.dismissRenameOffer()}>
+				<X size={16} />
+			</button>
+		</div>
+	{/if}
+	{#if ws.message}
+		<div class="toast" role="alert">
+			<span>{ws.message}</span>
+			<button class="icon-btn" aria-label="Dismiss" onclick={() => (ws.message = null)}><X size={16} /></button>
+		</div>
+	{/if}
+</div>
 
 <style>
 	.app {
@@ -155,12 +170,20 @@
 		}
 	}
 
-	.toast {
+	/* Messages stack at the bottom centre, newest at the bottom. */
+	.toasts {
 		position: fixed;
 		left: 50%;
 		bottom: 1.25rem;
 		z-index: 30;
 		transform: translateX(-50%);
+		display: grid;
+		justify-items: center;
+		gap: 0.5rem;
+		pointer-events: none;
+	}
+	.toast {
+		pointer-events: auto;
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
@@ -174,6 +197,20 @@
 	}
 	.toast .icon-btn {
 		color: inherit;
+	}
+	.toast-action {
+		flex: none;
+		height: 1.85rem;
+		padding: 0 0.7rem;
+		border: 0;
+		border-radius: 4px;
+		background: var(--paper);
+		color: var(--ink);
+		font-size: 0.8125rem;
+		font-weight: 600;
+	}
+	.toast-action:hover {
+		background: var(--panel);
 	}
 	.toast .icon-btn:hover {
 		background: rgb(255 255 255 / 0.12);

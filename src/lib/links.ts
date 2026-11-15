@@ -28,3 +28,36 @@ export function extractLinks(markdown: string): string[] {
 /** Text with each [[link]] replaced by what it displays, e.g. for one-line previews. */
 export const linksAsText = (text: string) =>
 	text.replace(linkRegExp(), (_m, target: string, shown?: string) => (shown ?? target).trim());
+
+/** True if a title can be the target of a [[link]] (no brackets, pipes, "#" or line breaks). */
+export const isLinkableTitle = (title: string) => !!title.trim() && !/[[\]|#\n]/.test(title);
+
+/**
+ * Points [[links]] whose target matches `from` (a normalized title) at `to` instead, keeping any
+ * "#heading" and "|shown text". Links inside code blocks and inline code are left alone.
+ */
+export function retargetLinks(markdown: string, from: string, to: string): string {
+	let fence: string | null = null;
+	return markdown
+		.split('\n')
+		.map((line) => {
+			const marker = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+			if (fence) {
+				if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
+				return line;
+			}
+			if (marker) {
+				fence = marker;
+				return line;
+			}
+			const code = [...line.matchAll(/`[^`]*`/g)].map((m) => [m.index!, m.index! + m[0].length]);
+			return line.replace(linkRegExp(), (whole: string, target: string, shown: string | undefined, offset: number) => {
+				if (code.some(([start, end]) => offset < end && offset + whole.length > start)) return whole;
+				if (normalizeTitle(linkTarget(target)) !== from) return whole;
+				const hash = target.indexOf('#');
+				const heading = hash >= 0 ? target.slice(hash).trimEnd() : '';
+				return `[[${to}${heading}${shown !== undefined ? `|${shown}` : ''}]]`;
+			});
+		})
+		.join('\n');
+}

@@ -82,6 +82,9 @@ export const api = {
 	listTags: () => request<{ tags: TagCount[] }>('GET', '/tags'),
 	listTitles: () => request<{ notes: NoteTitle[] }>('GET', '/titles'),
 	listBacklinks: (id: string) => request<{ backlinks: Backlink[] }>('GET', `${notePath(id)}/backlinks`),
+	relinkCandidates: (id: string, from: string) =>
+		request<{ notes: NoteTitle[] }>('GET', `${notePath(id)}/relink?${new URLSearchParams({ from })}`),
+	relink: (id: string, from: string) => request<{ updated: NoteTitle[] }>('POST', `${notePath(id)}/relink`, { from }),
 
 	changePassword: (currentPassword: string, newPassword: string) =>
 		request<{ otherSessionsSignedOut: number }>('POST', '/me/password', { currentPassword, newPassword }),

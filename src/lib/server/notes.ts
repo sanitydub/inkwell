@@ -4,7 +4,7 @@ import { getDb, transaction } from './db';
 import { notebookExists } from './notebooks';
 import { snippetFrom } from '#lib/snippet.ts';
 import { extractTags } from '#lib/tags.ts';
-import { extractLinks, linkRegExp, linkTarget, normalizeTitle } from '#lib/links.ts';
+import { extractLinks, isLinkableTitle, linkRegExp, linkTarget, normalizeTitle, retargetLinks } from '#lib/links.ts';
 import type { Backlink, Note, NoteSummary, NoteTitle, TagCount, View } from '#lib/types.ts';
 
 export const MAX_TITLE = 500;
@@ -284,4 +284,50 @@ export function deleteNote(userId: string, id: string): boolean {
 export function emptyTrash(userId: string): number {
 	const res = getDb().prepare('DELETE FROM notes WHERE user_id = ? AND trashed_at IS NOT NULL').run(userId);
 	return Number(res.changes);
+}
+
+/**
+ * Notes (outside the trash, other than this one) whose [[links]] point at `from` and would move to
+ * this note's current title. Empty when the links should stay: the title didn't really change,
+ * the new title can't be linked to, or another note still has the old title. Null if no such note.
+ */
+export function relinkCandidates(userId: string, id: string, from: string): NoteTitle[] | null {
+	const note = getDb().prepare('SELECT title FROM notes WHERE id = ? AND user_id = ?').get(id, userId) as
+		| { title: string }
+		| undefined;
+	if (!note) return null;
+	const old = normalizeTitle(from);
+	if (!old || old === normalizeTitle(note.title) || !isLinkableTitle(note.title)) return [];
+
+	const stillTaken = listTitles(userId).some((t) => t.id !== id && normalizeTitle(t.title) === old);
+	if (stillTaken) return [];
+
+	return getDb()
+		.prepare(
+			`SELECT n.id, n.title FROM note_links l JOIN notes n ON n.id = l.note_id
+			 WHERE l.target = ? AND n.user_id = ? AND n.trashed_at IS NULL AND n.id != ?
+			 ORDER BY n.updated_at DESC`
+		)
+		.all(old, userId, id) as unknown as NoteTitle[];
+}
+
+/** Rewrites the links found by relinkCandidates to the note's current title. Returns the notes changed. */
+export function relinkNotes(userId: string, id: string, from: string): NoteTitle[] | null {
+	const candidates = relinkCandidates(userId, id, from);
+	if (!candidates?.length) return candidates;
+	const to = (getDb().prepare('SELECT title FROM notes WHERE id = ?').get(id) as { title: string }).title.trim();
+	const old = normalizeTitle(from);
+	const now = Date.now();
+	const changed: NoteTitle[] = [];
+	transaction(() => {
+		for (const candidate of candidates) {
+			const { content } = getDb().prepare('SELECT content FROM notes WHERE id = ?').get(candidate.id) as { content: string };
+			const next = retargetLinks(content, old, to);
+			if (next === content) continue;
+			getDb().prepare('UPDATE notes SET content = ?, updated_at = ? WHERE id = ?').run(next, now, candidate.id);
+			indexContent(candidate.id, next);
+			changed.push(candidate);
+		}
+	});
+	return changed;
 }

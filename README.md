@@ -11,7 +11,7 @@ A simple note-taking app you host yourself. Write in Markdown with a live previe
 - Markdown editor (CodeMirror) with Write, Split and Read layouts; tick `- [ ]` tasks right in the rendered note
 - Full-text search with prefix matching
 - Notebooks to group notes, and inline `#tags` (nested like `#project/inkwell`) typed anywhere in a note
-- `[[Wiki-links]]` between notes with title suggestions as you type, plus a “Linked from” list of backlinks on every note
+- `[[Wiki-links]]` between notes with title suggestions as you type, a “Linked from” list of backlinks on every note, and an offer to update links when you rename a note
 - Pin notes, move them to the trash, restore them, or delete them for good
 - Download any note as a `.md` file, or export everything as a zip (one folder per notebook)
 - Import Markdown files or a zip, such as an Obsidian vault, a Joplin Markdown export, or an Inkwell export
@@ -157,9 +157,11 @@ All endpoints take and return JSON. Authentication is a session cookie set by re
 | `POST`   | `/api/import`         | multipart form data, one or more `files` (.md, .txt, .zip) |
 | `GET`    | `/api/titles`         | every note title (for resolving links)        |
 | `GET`    | `/api/notes/:id/backlinks` | notes that `[[link]]` here, with the linking line |
+| `GET`    | `/api/notes/:id/relink` | `?from=<old title>`: notes whose links would move to this note's current title |
+| `POST`   | `/api/notes/:id/relink` | `{ from }`: rewrites those links to the current title |
 | `GET`    | `/api/health`         |                                               |
 
-Links work the same way: `[[Title]]` or `[[Title|shown text]]` in note content is indexed on save and matched to note titles ignoring case, so renaming a note means updating the links that point to it.
+Links work the same way: `[[Title]]` or `[[Title|shown text]]` in note content is indexed on save and matched to note titles ignoring case, so when you rename a note, Inkwell offers to point the links at the new title (`POST /api/notes/:id/relink`), keeping any `#heading` and display text.
 
 Tags are read from `#words` in note content on every save (ignoring code), so there's no tag endpoint to write to. Filtering by `tag=project` also matches nested tags like `project/inkwell`.
 
